@@ -1,28 +1,37 @@
 # 🦞 OpenClaw Dashboard
 
+[![Python](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![PyPI version](https://img.shields.io/pypi/v/openclaw-dashboard)](https://pypi.org/project/openclaw-dashboard/)
+[![GitHub issues](https://img.shields.io/github/issues/vivekchand/openclaw-dashboard)](https://github.com/vivekchand/openclaw-dashboard/issues)
+[![GitHub stars](https://img.shields.io/github/stars/vivekchand/openclaw-dashboard)](https://github.com/vivekchand/openclaw-dashboard/stargazers)
+
 **See your agent think.** The Grafana for your personal AI agent.
 
-Real-time observability dashboard for [OpenClaw/Moltbot](https://github.com/openclaw/openclaw) AI agents. One file. Zero config. Just run it.
+Real-time observability dashboard for [OpenClaw/Moltbot](https://github.com/openclaw/openclaw) AI agents. **One file. Zero config. Just run it.**
 
 ![Flow Visualization](https://raw.githubusercontent.com/vivekchand/openclaw-dashboard/main/screenshots/flow.jpg)
 
+> 🌟 **[Star this repo](https://github.com/vivekchand/openclaw-dashboard)** if you find it useful!
+
 ---
 
-## ⚡ Quick Start
+## ⚡ **Quick Start** (30 seconds)
 
+### Install & run:
 ```bash
 pip install openclaw-dashboard
 openclaw-dashboard
 ```
 
-Or run directly:
-
+### Or download & run:
 ```bash
+curl -O https://raw.githubusercontent.com/vivekchand/openclaw-dashboard/main/dashboard.py
 pip install flask
 python3 dashboard.py
 ```
 
-Opens at **http://localhost:8900** — auto-detects your OpenClaw workspace.
+🎉 **Done!** Opens at **http://localhost:8900** — auto-detects your OpenClaw workspace.
 
 ---
 
@@ -186,17 +195,15 @@ Your Agent (Moltbot)          OpenClaw Dashboard
 
 ---
 
-## 📦 Installation Options
+## 📦 Installation
 
-### pip (recommended)
-
+### 🚀 **Option 1: pip (recommended)**
 ```bash
 pip install openclaw-dashboard
 openclaw-dashboard
 ```
 
-### From source
-
+### 🛠️ **Option 2: from source**
 ```bash
 git clone https://github.com/vivekchand/openclaw-dashboard.git
 cd openclaw-dashboard
@@ -204,11 +211,12 @@ pip install -r requirements.txt
 python3 dashboard.py
 ```
 
-### One-liner
-
+### ⚡ **Option 3: one-liner**
 ```bash
 curl -sSL https://raw.githubusercontent.com/vivekchand/openclaw-dashboard/main/install.sh | bash
 ```
+
+All methods open the dashboard at **http://localhost:8900** and auto-detect your OpenClaw workspace.
 
 ---
 

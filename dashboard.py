@@ -25,7 +25,7 @@ import subprocess
 import time
 import threading
 from datetime import datetime, timezone, timedelta
-from flask import Flask, render_template_string, request, jsonify, Response
+from flask import Flask, render_template_string, request, jsonify, Response, make_response
 
 # Optional: OpenTelemetry protobuf support for OTLP receiver
 _HAS_OTEL_PROTO = False
@@ -379,6 +379,10 @@ def _get_otel_usage_data():
 
     msg_count = len(metrics_store['messages'])
 
+    # Enhanced cost tracking for OTLP data
+    trend_data = _analyze_usage_trends(daily_tokens) 
+    warnings = _generate_cost_warnings(today_cost_val, week_cost_val, month_cost_val, trend_data)
+
     return {
         'source': 'otlp',
         'days': days,
@@ -394,6 +398,8 @@ def _get_otel_usage_data():
             {'model': k, 'tokens': v}
             for k, v in sorted(model_usage.items(), key=lambda x: -x[1])
         ],
+        'trend': trend_data,
+        'warnings': warnings,
     }
 
 
@@ -446,7 +452,7 @@ def detect_config(args=None):
         LOG_DIR = os.path.expanduser(os.environ["OPENCLAW_LOG_DIR"])
     else:
         candidates = ["/tmp/moltbot", "/tmp/openclaw", os.path.expanduser("~/.clawdbot/logs")]
-        LOG_DIR = next((d for d in candidates if os.path.isdir(d)), "/tmp/moltbot")
+        LOG_DIR = next((d for d in candidates if os.path.isdir(d)), "/tmp/openclaw")
 
     # 3. Sessions directory (transcript .jsonl files)
     if args and getattr(args, 'sessions_dir', None):
@@ -517,75 +523,133 @@ DASHBOARD_HTML = r"""
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>OpenClaw Dashboard 🦞</title>
 <style>
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0a0a14; color: #e0e0e0; min-height: 100vh; }
+  :root {
+    /* Dark theme (default) */
+    --bg-primary: #0a0a14;
+    --bg-secondary: #12122a;
+    --bg-tertiary: #141428;
+    --bg-hover: #1a1a35;
+    --bg-accent: #f0c040;
+    --border-primary: #2a2a4a;
+    --border-secondary: #1a1a30;
+    --text-primary: #e0e0e0;
+    --text-secondary: #ccc;
+    --text-tertiary: #888;
+    --text-muted: #666;
+    --text-faint: #555;
+    --text-accent: #f0c040;
+    --text-link: #60a0ff;
+    --text-success: #27ae60;
+    --text-warning: #f0c040;
+    --text-error: #e74c3c;
+    --bg-success: #1a3a2a;
+    --bg-warning: #2a2a1a;
+    --bg-error: #3a1a1a;
+    --log-bg: #0a0a14;
+    --file-viewer-bg: #0d0d1a;
+    --button-bg: #2a2a4a;
+    --button-hover: #3a3a5a;
+  }
 
-  .nav { background: #12122a; border-bottom: 1px solid #2a2a4a; padding: 12px 20px; display: flex; align-items: center; gap: 16px; overflow-x: auto; -webkit-overflow-scrolling: touch; }
-  .nav h1 { font-size: 20px; color: #fff; white-space: nowrap; }
-  .nav h1 span { color: #f0c040; }
+  [data-theme="light"] {
+    /* Light theme */
+    --bg-primary: #ffffff;
+    --bg-secondary: #f8f9fa;
+    --bg-tertiary: #ffffff;
+    --bg-hover: #f1f3f4;
+    --bg-accent: #1976d2;
+    --border-primary: #e0e0e0;
+    --border-secondary: #f0f0f0;
+    --text-primary: #212529;
+    --text-secondary: #495057;
+    --text-tertiary: #6c757d;
+    --text-muted: #868e96;
+    --text-faint: #adb5bd;
+    --text-accent: #1976d2;
+    --text-link: #1976d2;
+    --text-success: #198754;
+    --text-warning: #fd7e14;
+    --text-error: #dc3545;
+    --bg-success: #d1e7dd;
+    --bg-warning: #fff3cd;
+    --bg-error: #f8d7da;
+    --log-bg: #f8f9fa;
+    --file-viewer-bg: #ffffff;
+    --button-bg: #e9ecef;
+    --button-hover: #dee2e6;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg-primary); color: var(--text-primary); min-height: 100vh; }
+
+  .nav { background: var(--bg-secondary); border-bottom: 1px solid var(--border-primary); padding: 12px 20px; display: flex; align-items: center; gap: 16px; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .nav h1 { font-size: 20px; color: var(--text-primary); white-space: nowrap; }
+  .nav h1 span { color: var(--text-accent); }
+  .theme-toggle { background: var(--button-bg); border: 1px solid var(--border-primary); border-radius: 8px; padding: 8px 12px; color: var(--text-tertiary); cursor: pointer; font-size: 16px; margin-left: 12px; transition: all 0.15s; }
+  .theme-toggle:hover { background: var(--button-hover); color: var(--text-secondary); }
   .nav-tabs { display: flex; gap: 4px; margin-left: auto; }
-  .nav-tab { padding: 8px 16px; border-radius: 8px; background: transparent; border: 1px solid #2a2a4a; color: #888; cursor: pointer; font-size: 13px; font-weight: 600; white-space: nowrap; transition: all 0.15s; }
-  .nav-tab:hover { background: #1a1a35; color: #ccc; }
-  .nav-tab.active { background: #f0c040; color: #000; border-color: #f0c040; }
+  .nav-tab { padding: 8px 16px; border-radius: 8px; background: transparent; border: 1px solid var(--border-primary); color: var(--text-tertiary); cursor: pointer; font-size: 13px; font-weight: 600; white-space: nowrap; transition: all 0.15s; }
+  .nav-tab:hover { background: var(--bg-hover); color: var(--text-secondary); }
+  .nav-tab.active { background: var(--bg-accent); color: var(--bg-primary); border-color: var(--bg-accent); }
 
   .page { display: none; padding: 16px; max-width: 1200px; margin: 0 auto; }
   .page.active { display: block; }
 
   .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; margin-bottom: 16px; }
-  .card { background: #141428; border: 1px solid #2a2a4a; border-radius: 12px; padding: 16px; }
-  .card-title { font-size: 12px; text-transform: uppercase; color: #666; letter-spacing: 1px; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
+  .card { background: var(--bg-tertiary); border: 1px solid var(--border-primary); border-radius: 12px; padding: 16px; }
+  .card-title { font-size: 12px; text-transform: uppercase; color: var(--text-muted); letter-spacing: 1px; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
   .card-title .icon { font-size: 16px; }
-  .card-value { font-size: 28px; font-weight: 700; color: #fff; }
-  .card-sub { font-size: 12px; color: #555; margin-top: 4px; }
+  .card-value { font-size: 28px; font-weight: 700; color: var(--text-primary); }
+  .card-sub { font-size: 12px; color: var(--text-faint); margin-top: 4px; }
 
-  .stat-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #1a1a30; }
+  .stat-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--border-secondary); }
   .stat-row:last-child { border-bottom: none; }
-  .stat-label { color: #888; font-size: 13px; }
-  .stat-val { color: #fff; font-size: 13px; font-weight: 600; }
-  .stat-val.green { color: #27ae60; }
-  .stat-val.yellow { color: #f0c040; }
-  .stat-val.red { color: #e74c3c; }
+  .stat-label { color: var(--text-tertiary); font-size: 13px; }
+  .stat-val { color: var(--text-primary); font-size: 13px; font-weight: 600; }
+  .stat-val.green { color: var(--text-success); }
+  .stat-val.yellow { color: var(--text-warning); }
+  .stat-val.red { color: var(--text-error); }
 
-  .session-item { padding: 12px; border-bottom: 1px solid #1a1a30; }
+  .session-item { padding: 12px; border-bottom: 1px solid var(--border-secondary); }
   .session-item:last-child { border-bottom: none; }
-  .session-name { font-weight: 600; font-size: 14px; color: #fff; }
-  .session-meta { font-size: 12px; color: #666; margin-top: 4px; display: flex; gap: 12px; flex-wrap: wrap; }
+  .session-name { font-weight: 600; font-size: 14px; color: var(--text-primary); }
+  .session-meta { font-size: 12px; color: var(--text-muted); margin-top: 4px; display: flex; gap: 12px; flex-wrap: wrap; }
   .session-meta span { display: flex; align-items: center; gap: 4px; }
 
-  .cron-item { padding: 12px; border-bottom: 1px solid #1a1a30; }
+  .cron-item { padding: 12px; border-bottom: 1px solid var(--border-secondary); }
   .cron-item:last-child { border-bottom: none; }
-  .cron-name { font-weight: 600; font-size: 14px; color: #fff; }
-  .cron-schedule { font-size: 12px; color: #f0c040; margin-top: 2px; font-family: monospace; }
-  .cron-meta { font-size: 12px; color: #666; margin-top: 4px; }
+  .cron-name { font-weight: 600; font-size: 14px; color: var(--text-primary); }
+  .cron-schedule { font-size: 12px; color: var(--text-accent); margin-top: 2px; font-family: monospace; }
+  .cron-meta { font-size: 12px; color: var(--text-muted); margin-top: 4px; }
   .cron-status { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; }
-  .cron-status.ok { background: #1a3a2a; color: #27ae60; }
-  .cron-status.error { background: #3a1a1a; color: #e74c3c; }
-  .cron-status.pending { background: #2a2a1a; color: #f0c040; }
+  .cron-status.ok { background: var(--bg-success); color: var(--text-success); }
+  .cron-status.error { background: var(--bg-error); color: var(--text-error); }
+  .cron-status.pending { background: var(--bg-warning); color: var(--text-warning); }
 
-  .log-viewer { background: #0a0a14; border: 1px solid #2a2a4a; border-radius: 8px; font-family: 'JetBrains Mono', monospace; font-size: 12px; line-height: 1.6; padding: 12px; max-height: 500px; overflow-y: auto; -webkit-overflow-scrolling: touch; white-space: pre-wrap; word-break: break-all; }
+  .log-viewer { background: var(--log-bg); border: 1px solid var(--border-primary); border-radius: 8px; font-family: 'JetBrains Mono', monospace; font-size: 12px; line-height: 1.6; padding: 12px; max-height: 500px; overflow-y: auto; -webkit-overflow-scrolling: touch; white-space: pre-wrap; word-break: break-all; }
   .log-line { padding: 1px 0; }
-  .log-line .ts { color: #666; }
-  .log-line .info { color: #60a0ff; }
-  .log-line .warn { color: #f0c040; }
-  .log-line .err { color: #e74c3c; }
-  .log-line .msg { color: #ccc; }
+  .log-line .ts { color: var(--text-muted); }
+  .log-line .info { color: var(--text-link); }
+  .log-line .warn { color: var(--text-warning); }
+  .log-line .err { color: var(--text-error); }
+  .log-line .msg { color: var(--text-secondary); }
 
-  .memory-item { padding: 10px 12px; border-bottom: 1px solid #1a1a30; display: flex; justify-content: space-between; align-items: center; cursor: pointer; transition: background 0.15s; }
-  .memory-item:hover { background: #1a1a35; }
+  .memory-item { padding: 10px 12px; border-bottom: 1px solid var(--border-secondary); display: flex; justify-content: space-between; align-items: center; cursor: pointer; transition: background 0.15s; }
+  .memory-item:hover { background: var(--bg-hover); }
   .memory-item:last-child { border-bottom: none; }
-  .file-viewer { background: #0d0d1a; border: 1px solid #2a2a4a; border-radius: 12px; padding: 16px; margin-top: 16px; display: none; }
+  .file-viewer { background: var(--file-viewer-bg); border: 1px solid var(--border-primary); border-radius: 12px; padding: 16px; margin-top: 16px; display: none; }
   .file-viewer-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
-  .file-viewer-title { font-size: 14px; font-weight: 600; color: #f0c040; }
-  .file-viewer-close { background: #2a2a4a; border: none; color: #ccc; padding: 4px 12px; border-radius: 6px; cursor: pointer; font-size: 13px; }
-  .file-viewer-close:hover { background: #3a3a5a; }
-  .file-viewer-content { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 12px; color: #ccc; white-space: pre-wrap; word-break: break-word; max-height: 60vh; overflow-y: auto; line-height: 1.5; }
-  .memory-name { font-weight: 600; font-size: 14px; color: #60a0ff; cursor: pointer; }
+  .file-viewer-title { font-size: 14px; font-weight: 600; color: var(--text-accent); }
+  .file-viewer-close { background: var(--button-bg); border: none; color: var(--text-secondary); padding: 4px 12px; border-radius: 6px; cursor: pointer; font-size: 13px; }
+  .file-viewer-close:hover { background: var(--button-hover); }
+  .file-viewer-content { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 12px; color: var(--text-secondary); white-space: pre-wrap; word-break: break-word; max-height: 60vh; overflow-y: auto; line-height: 1.5; }
+  .memory-name { font-weight: 600; font-size: 14px; color: var(--text-link); cursor: pointer; }
   .memory-name:hover { text-decoration: underline; }
-  .memory-size { font-size: 12px; color: #555; }
+  .memory-size { font-size: 12px; color: var(--text-faint); }
 
   .refresh-bar { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
-  .refresh-btn { padding: 8px 16px; background: #2a2a4a; border: none; border-radius: 6px; color: #e0e0e0; cursor: pointer; font-size: 13px; font-weight: 600; }
-  .refresh-btn:hover { background: #3a3a5a; }
+  .refresh-btn { padding: 8px 16px; background: var(--button-bg); border: none; border-radius: 6px; color: var(--text-primary); cursor: pointer; font-size: 13px; font-weight: 600; }
+  .refresh-btn:hover { background: var(--button-hover); }
   .refresh-time { font-size: 12px; color: #555; }
   .pulse { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #27ae60; animation: pulse 1.5s infinite; }
   @keyframes pulse { 0%,100% { opacity: 1; box-shadow: 0 0 4px #27ae60; } 50% { opacity: 0.3; box-shadow: none; } }
@@ -600,12 +664,12 @@ DASHBOARD_HTML = r"""
   .section-title { font-size: 16px; font-weight: 700; color: #fff; margin: 20px 0 12px; display: flex; align-items: center; gap: 8px; }
 
   /* === Flow Visualization === */
-  .flow-container { width: 100%; overflow-x: auto; overflow-y: hidden; position: relative; }
+  .flow-container { width: 100%; overflow-x: auto; overflow-y: hidden; position: relative; -webkit-overflow-scrolling: touch; }
   .flow-stats { display: flex; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }
   .flow-stat { background: #141428; border: 1px solid #2a2a4a; border-radius: 8px; padding: 8px 14px; flex: 1; min-width: 100px; }
   .flow-stat-label { font-size: 10px; text-transform: uppercase; color: #555; letter-spacing: 1px; display: block; }
   .flow-stat-value { font-size: 20px; font-weight: 700; color: #fff; display: block; margin-top: 2px; }
-  #flow-svg { width: 100%; min-width: 800px; height: auto; display: block; }
+  #flow-svg { width: 100%; min-width: 800px; height: auto; display: block; overflow: visible; }
   #flow-svg text { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 13px; font-weight: 600; fill: #d0d0d0; text-anchor: middle; dominant-baseline: central; pointer-events: none; }
   .flow-node rect { rx: 12; ry: 12; stroke-width: 1.5; transition: all 0.3s ease; }
   .flow-node-channel rect { fill: #161630; stroke: #6a40bf; }
@@ -613,10 +677,10 @@ DASHBOARD_HTML = r"""
   .flow-node-session rect { fill: #142818; stroke: #40c060; }
   .flow-node-brain rect { fill: #221c08; stroke: #f0c040; stroke-width: 2.5; }
   .flow-node-tool rect { fill: #1e1414; stroke: #c05030; }
-  .flow-node-channel.active rect { filter: drop-shadow(0 0 10px rgba(106,64,191,0.7)); stroke-width: 2.5; }
-  .flow-node-gateway.active rect { filter: drop-shadow(0 0 10px rgba(64,128,224,0.7)); stroke-width: 2.5; }
-  .flow-node-session.active rect { filter: drop-shadow(0 0 10px rgba(64,192,96,0.7)); stroke-width: 2.5; }
-  .flow-node-tool.active rect { filter: drop-shadow(0 0 10px rgba(224,96,64,0.8)); stroke: #ff8050; stroke-width: 2.5; }
+  .flow-node-channel.active rect { filter: drop-shadow(0 0 12px rgba(106,64,191,0.8)) drop-shadow(0 0 20px rgba(106,64,191,0.4)); stroke-width: 2.5; transform: scale(1.05); }
+  .flow-node-gateway.active rect { filter: drop-shadow(0 0 12px rgba(64,128,224,0.8)) drop-shadow(0 0 20px rgba(64,128,224,0.4)); stroke-width: 2.5; transform: scale(1.05); }
+  .flow-node-session.active rect { filter: drop-shadow(0 0 12px rgba(64,192,96,0.8)) drop-shadow(0 0 20px rgba(64,192,96,0.4)); stroke-width: 2.5; transform: scale(1.05); }
+  .flow-node-tool.active rect { filter: drop-shadow(0 0 12px rgba(224,96,64,0.9)) drop-shadow(0 0 24px rgba(224,96,64,0.5)); stroke: #ff8050; stroke-width: 2.5; transform: scale(1.1); }
   .flow-path { fill: none; stroke: #1a1a36; stroke-width: 2; stroke-linecap: round; transition: stroke 0.4s, opacity 0.4s; }
   .flow-path.glow-blue { stroke: #4080e0; filter: drop-shadow(0 0 6px rgba(64,128,224,0.6)); }
   .flow-path.glow-yellow { stroke: #f0c040; filter: drop-shadow(0 0 6px rgba(240,192,64,0.6)); }
@@ -686,6 +750,13 @@ DASHBOARD_HTML = r"""
   .usage-table th { text-align: left; font-size: 12px; color: #666; padding: 8px 12px; border-bottom: 1px solid #2a2a4a; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
   .usage-table td { padding: 8px 12px; font-size: 13px; color: #ccc; border-bottom: 1px solid #1a1a30; }
   .usage-table tr:last-child td { border-bottom: none; font-weight: 700; color: #f0c040; }
+  
+  /* === Cost Warnings === */
+  .cost-warning { padding: 12px 16px; border-radius: 8px; margin-bottom: 8px; display: flex; align-items: center; gap: 10px; font-size: 13px; }
+  .cost-warning.error { background: #4a1a1a; border: 1px solid #8b2635; color: #ff6b6b; }
+  .cost-warning.warning { background: #4a3a1a; border: 1px solid #d4a017; color: #f0c040; }
+  .cost-warning-icon { font-size: 16px; }
+  .cost-warning-message { flex: 1; }
 
   /* === Transcript Viewer === */
   .transcript-item { padding: 12px 16px; border-bottom: 1px solid #1a1a30; cursor: pointer; transition: background 0.15s; display: flex; justify-content: space-between; align-items: center; }
@@ -710,6 +781,12 @@ DASHBOARD_HTML = r"""
   .chat-msg.assistant .chat-content-truncated::after { background: linear-gradient(transparent, rgba(26,58,42,0.9)); }
   .chat-msg.tool .chat-content-truncated::after { background: linear-gradient(transparent, rgba(26,26,36,0.9)); }
 
+  /* === Mini Dashboard Widgets === */
+  .tool-spark { font-size: 9px; color: #555; padding: 2px 6px; background: #1a1a30; border-radius: 4px; }
+  .tool-spark span { color: #f0c040; font-weight: 600; }
+  .card:hover { transform: translateY(-2px); transition: all 0.2s ease; box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
+  .card[onclick] { cursor: pointer; }
+
   @media (max-width: 768px) {
     .nav { padding: 10px 12px; gap: 8px; }
     .nav h1 { font-size: 16px; }
@@ -724,87 +801,138 @@ DASHBOARD_HTML = r"""
     .heatmap-grid { min-width: 500px; }
     .chat-msg { max-width: 95%; }
     .usage-chart { height: 150px; }
+    
+    /* Enhanced Flow mobile optimizations */
+    .flow-container { 
+      padding-bottom: 20px; 
+      max-height: 70vh; 
+      overflow-y: auto; 
+    }
+    #flow-svg text { font-size: 10px !important; }
+    .flow-label { font-size: 7px !important; }
+    .flow-node rect { stroke-width: 1 !important; }
+    .flow-node.active rect { stroke-width: 1.5 !important; }
+    .brain-group { animation-duration: 1.8s; } /* Faster on mobile */
   }
 </style>
 </head>
 <body>
 <div class="nav">
   <h1><span>🦞</span> OpenClaw</h1>
+  <div class="theme-toggle" onclick="toggleTheme()" title="Toggle theme">🌙</div>
   <div class="nav-tabs">
-    <div class="nav-tab active" onclick="switchTab('overview')">Overview</div>
+    <div class="nav-tab active" onclick="switchTab('flow')">🌊 Flow</div>
+    <div class="nav-tab" onclick="switchTab('overview')">Overview</div>
     <div class="nav-tab" onclick="switchTab('usage')">📊 Usage</div>
     <div class="nav-tab" onclick="switchTab('sessions')">Sessions</div>
     <div class="nav-tab" onclick="switchTab('crons')">Crons</div>
     <div class="nav-tab" onclick="switchTab('logs')">Logs</div>
     <div class="nav-tab" onclick="switchTab('memory')">Memory</div>
     <div class="nav-tab" onclick="switchTab('transcripts')">📜 Transcripts</div>
-    <div class="nav-tab" onclick="switchTab('flow')">Flow</div>
   </div>
 </div>
 
-<!-- OVERVIEW -->
-<div class="page active" id="page-overview">
+<!-- OVERVIEW (New Mission Control) -->
+<div class="page" id="page-overview">
   <div class="refresh-bar">
     <button class="refresh-btn" onclick="loadAll()">↻ Refresh</button>
     <span class="pulse"></span>
     <span class="live-badge">LIVE</span>
     <span class="refresh-time" id="refresh-time">Loading...</span>
   </div>
+
+  <!-- Mini Dashboard Widgets Grid -->
   <div class="grid">
-    <div class="card">
-      <div class="card-title"><span class="icon">🧠</span> Model</div>
-      <div class="card-value" id="ov-model">—</div>
-      <div class="card-sub" id="ov-model-sub"></div>
+    <!-- 🧠 Thinking Feed -->
+    <div class="card" onclick="openDetailView('thinking')" style="cursor:pointer;">
+      <div class="card-title"><span class="icon">🧠</span> Thinking Feed</div>
+      <div class="card-value" id="thinking-status">—</div>
+      <div class="card-sub" id="thinking-latest">Live stream of AI thoughts...</div>
+      <div style="margin-top:10px; max-height:60px; overflow:hidden; font-size:11px; line-height:1.3; color:#888;" id="thinking-preview">Initializing...</div>
     </div>
-    <div class="card">
-      <div class="card-title"><span class="icon">💬</span> Active Sessions</div>
-      <div class="card-value" id="ov-sessions">—</div>
-      <div class="card-sub" id="ov-sessions-sub"></div>
+
+    <!-- 💰 Cost Ticker -->
+    <div class="card" onclick="openDetailView('cost')" style="cursor:pointer;">
+      <div class="card-title"><span class="icon">💰</span> Cost Ticker</div>
+      <div class="card-value" id="cost-today">$0.00</div>
+      <div class="card-sub" id="cost-trend">Today's running total</div>
+      <div style="margin-top:8px;">
+        <div style="font-size:10px; color:#666;">This week: <span id="cost-week" style="color:#f0c040;">—</span></div>
+        <div style="font-size:10px; color:#666;">This month: <span id="cost-month" style="color:#f0c040;">—</span></div>
+      </div>
     </div>
-    <div class="card">
-      <div class="card-title"><span class="icon">⏰</span> Cron Jobs</div>
-      <div class="card-value" id="ov-crons">—</div>
-      <div class="card-sub" id="ov-crons-sub"></div>
+
+    <!-- ⚡ Tool Activity -->
+    <div class="card" onclick="openDetailView('tools')" style="cursor:pointer;">
+      <div class="card-title"><span class="icon">⚡</span> Tool Activity</div>
+      <div class="card-value" id="tools-active">—</div>
+      <div class="card-sub" id="tools-recent">Most recent tool calls</div>
+      <div style="margin-top:10px; display:flex; gap:4px; flex-wrap:wrap;" id="tools-sparklines">
+        <div class="tool-spark" title="exec">exec: <span>—</span></div>
+        <div class="tool-spark" title="browser">browser: <span>—</span></div>
+        <div class="tool-spark" title="search">search: <span>—</span></div>
+      </div>
     </div>
-    <div class="card">
-      <div class="card-title"><span class="icon">📊</span> Context Tokens</div>
-      <div class="card-value" id="ov-tokens">—</div>
-      <div class="card-sub" id="ov-tokens-sub"></div>
+
+    <!-- 📊 Token Burn Rate -->
+    <div class="card" onclick="openDetailView('tokens')" style="cursor:pointer;">
+      <div class="card-title"><span class="icon">📊</span> Token Burn Rate</div>
+      <div class="card-value" id="token-rate">—</div>
+      <div class="card-sub">tokens/minute (last hour)</div>
+      <div style="margin-top:8px;">
+        <div style="font-size:10px; color:#666;">Today: <span id="tokens-today" style="color:#60ff80;">—</span></div>
+        <div style="font-size:10px; color:#666;">Peak: <span id="tokens-peak" style="color:#f0c040;">—</span></div>
+      </div>
     </div>
-    <div class="card">
-      <div class="card-title"><span class="icon">💾</span> Memory Files</div>
-      <div class="card-value" id="ov-memory">—</div>
-      <div class="card-sub" id="ov-memory-sub"></div>
+
+    <!-- 🔥 Hot Sessions -->
+    <div class="card" onclick="openDetailView('sessions')" style="cursor:pointer;">
+      <div class="card-title"><span class="icon">🔥</span> Hot Sessions</div>
+      <div class="card-value" id="hot-sessions-count">—</div>
+      <div class="card-sub">Most active right now</div>
+      <div style="margin-top:10px; max-height:50px; overflow:hidden;" id="hot-sessions-list">Loading...</div>
     </div>
-    <div class="card">
-      <div class="card-title"><span class="icon">💻</span> System</div>
-      <div id="ov-system"></div>
+
+    <!-- 📈 Model Mix -->
+    <div class="card" onclick="openDetailView('models')" style="cursor:pointer;">
+      <div class="card-title"><span class="icon">📈</span> Model Mix</div>
+      <div class="card-value" id="model-primary">—</div>
+      <div class="card-sub">Primary model usage</div>
+      <div style="margin-top:8px;">
+        <div style="font-size:10px; color:#666;" id="model-breakdown">Loading mix...</div>
+      </div>
     </div>
   </div>
+
+  <!-- Topics/Activity Stream -->
+  <div class="section-title">🗣️ Activity Stream <span style="font-size:12px;color:#666;font-weight:400;">(What AI is working on)</span></div>
+  <div class="card">
+    <div style="max-height:200px; overflow-y:auto; font-family:'SF Mono',monospace; font-size:12px; line-height:1.4;" id="activity-stream">
+      <div style="color:#666;">Parsing recent assistant messages...</div>
+    </div>
+  </div>
+
+  <!-- System Health (Compact) -->
   <div class="section-title">❤️ System Health</div>
   <div class="health-grid" id="health-grid">
     <div class="health-item" id="health-gateway"><div class="health-dot" id="health-dot-gateway"></div><div class="health-info"><div class="health-name">Gateway</div><div class="health-detail" id="health-detail-gateway">Checking...</div></div></div>
     <div class="health-item" id="health-disk"><div class="health-dot" id="health-dot-disk"></div><div class="health-info"><div class="health-name">Disk Space</div><div class="health-detail" id="health-detail-disk">Checking...</div></div></div>
     <div class="health-item" id="health-memory"><div class="health-dot" id="health-dot-memory"></div><div class="health-info"><div class="health-name">Memory</div><div class="health-detail" id="health-detail-memory">Checking...</div></div></div>
-    <div class="health-item" id="health-uptime"><div class="health-dot" id="health-dot-uptime"></div><div class="health-info"><div class="health-name">Uptime</div><div class="health-detail" id="health-detail-uptime">Checking...</div></div></div>
-    <div class="health-item" id="health-otel"><div class="health-dot" id="health-dot-otel"></div><div class="health-info"><div class="health-name">📡 OTLP Metrics</div><div class="health-detail" id="health-detail-otel">Checking...</div></div></div>
+    <div class="health-item" id="health-otel"><div class="health-dot" id="health-dot-otel"></div><div class="health-info"><div class="health-name">📡 Data Source</div><div class="health-detail" id="health-detail-otel">Checking...</div></div></div>
   </div>
-
-  <div class="section-title">🔥 Activity Heatmap <span style="font-size:12px;color:#666;font-weight:400;">(7 days)</span></div>
-  <div class="card">
-    <div class="heatmap-wrap">
-      <div class="heatmap-grid" id="heatmap-grid">Loading...</div>
-    </div>
-    <div class="heatmap-legend" id="heatmap-legend"></div>
-  </div>
-
-  <div class="section-title">📋 Recent Logs</div>
-  <div class="log-viewer" id="ov-logs" style="max-height:300px;">Loading...</div>
 </div>
 
 <!-- USAGE -->
 <div class="page" id="page-usage">
-  <div class="refresh-bar"><button class="refresh-btn" onclick="loadUsage()">↻ Refresh</button></div>
+  <div class="refresh-bar">
+    <button class="refresh-btn" onclick="loadUsage()">↻ Refresh</button>
+    <button class="refresh-btn" onclick="exportUsageData()" style="margin-left: 8px;">📥 Export CSV</button>
+  </div>
+  
+  <!-- Cost Warnings -->
+  <div id="cost-warnings" style="display:none; margin-bottom: 16px;"></div>
+  
+  <!-- Main Usage Stats -->
   <div class="grid">
     <div class="card">
       <div class="card-title"><span class="icon">📊</span> Today</div>
@@ -820,6 +948,11 @@ DASHBOARD_HTML = r"""
       <div class="card-title"><span class="icon">📆</span> This Month</div>
       <div class="card-value" id="usage-month">—</div>
       <div class="card-sub" id="usage-month-cost"></div>
+    </div>
+    <div class="card" id="trend-card" style="display:none;">
+      <div class="card-title"><span class="icon">📈</span> Trend</div>
+      <div class="card-value" id="trend-direction">—</div>
+      <div class="card-sub" id="trend-prediction"></div>
     </div>
   </div>
   <div class="section-title">📊 Token Usage (14 days)</div>
@@ -902,7 +1035,7 @@ DASHBOARD_HTML = r"""
 </div>
 
 <!-- FLOW -->
-<div class="page" id="page-flow">
+<div class="page active" id="page-flow">
   <div class="flow-stats">
     <div class="flow-stat"><span class="flow-stat-label">Msgs / min</span><span class="flow-stat-value" id="flow-msg-rate">0</span></div>
     <div class="flow-stat"><span class="flow-stat-label">Events</span><span class="flow-stat-value" id="flow-event-count">0</span></div>
@@ -1067,6 +1200,7 @@ function switchTab(name) {
   document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
   document.getElementById('page-' + name).classList.add('active');
   event.target.classList.add('active');
+  if (name === 'overview') loadAll();
   if (name === 'usage') loadUsage();
   if (name === 'sessions') loadSessions();
   if (name === 'crons') loadCrons();
@@ -1074,6 +1208,43 @@ function switchTab(name) {
   if (name === 'memory') loadMemory();
   if (name === 'transcripts') loadTranscripts();
   if (name === 'flow') initFlow();
+}
+
+function exportUsageData() {
+  window.location.href = '/api/usage/export';
+}
+
+function toggleTheme() {
+  const body = document.body;
+  const toggle = document.querySelector('.theme-toggle');
+  const isDark = !body.hasAttribute('data-theme') || body.getAttribute('data-theme') === 'dark';
+  
+  if (isDark) {
+    body.setAttribute('data-theme', 'light');
+    toggle.textContent = '☀️';
+    toggle.title = 'Switch to dark theme';
+    localStorage.setItem('openclaw-theme', 'light');
+  } else {
+    body.setAttribute('data-theme', 'dark');
+    toggle.textContent = '🌙';
+    toggle.title = 'Switch to light theme';
+    localStorage.setItem('openclaw-theme', 'dark');
+  }
+}
+
+function initTheme() {
+  const savedTheme = localStorage.getItem('openclaw-theme') || 'dark';
+  const body = document.body;
+  const toggle = document.querySelector('.theme-toggle');
+  
+  body.setAttribute('data-theme', savedTheme);
+  if (savedTheme === 'light') {
+    toggle.textContent = '☀️';
+    toggle.title = 'Switch to dark theme';
+  } else {
+    toggle.textContent = '🌙';
+    toggle.title = 'Switch to light theme';
+  }
 }
 
 function timeAgo(ms) {
@@ -1091,34 +1262,22 @@ function formatTime(ms) {
 }
 
 async function loadAll() {
-  var [overview, logs] = await Promise.all([
+  var [overview, logs, usage] = await Promise.all([
     fetch('/api/overview').then(r => r.json()),
-    fetch('/api/logs?lines=30').then(r => r.json())
+    fetch('/api/logs?lines=30').then(r => r.json()),
+    fetch('/api/usage').then(r => r.json())
   ]);
 
-  document.getElementById('ov-model').textContent = overview.model || '—';
-  document.getElementById('ov-model-sub').textContent = 'Provider: ' + (overview.provider || 'anthropic');
-  document.getElementById('ov-sessions').textContent = overview.sessionCount;
-  document.getElementById('ov-sessions-sub').textContent = 'Main: ' + timeAgo(overview.mainSessionUpdated);
-  document.getElementById('ov-crons').textContent = overview.cronCount;
-  document.getElementById('ov-crons-sub').textContent = overview.cronEnabled + ' enabled, ' + overview.cronDisabled + ' disabled';
-  document.getElementById('ov-tokens').textContent = (overview.mainTokens / 1000).toFixed(0) + 'K';
-  document.getElementById('ov-tokens-sub').textContent = 'of ' + (overview.contextWindow / 1000) + 'K context window (' + ((overview.mainTokens/overview.contextWindow)*100).toFixed(0) + '% used)';
-  document.getElementById('ov-memory').textContent = overview.memoryCount;
-  document.getElementById('ov-memory-sub').textContent = (overview.memorySize / 1024).toFixed(1) + ' KB total';
+  // Load new mini dashboard widgets
+  loadMiniWidgets(overview, usage);
+  
+  // Load activity stream
+  loadActivityStream();
 
-  var sysHtml = '';
-  overview.system.forEach(function(s) {
-    sysHtml += '<div class="stat-row"><span class="stat-label">' + s[0] + '</span><span class="stat-val ' + (s[2]||'') + '">' + s[1] + '</span></div>';
-  });
-  document.getElementById('ov-system').innerHTML = sysHtml;
-
-  renderLogs('ov-logs', logs.lines);
-  document.getElementById('refresh-time').textContent = 'Updated ' + new Date().toLocaleTimeString();
-
-  // Load health checks and heatmap
+  // Load health checks
   loadHealth();
-  loadHeatmap();
+
+  document.getElementById('refresh-time').textContent = 'Updated ' + new Date().toLocaleTimeString();
 
   // Update flow infra details
   if (overview.infra) {
@@ -1128,6 +1287,164 @@ async function loadAll() {
     if (i.storage) document.getElementById('infra-storage-text').textContent = i.storage;
     if (i.network) document.getElementById('infra-network-text').textContent = 'LAN ' + i.network;
     if (i.userName) document.getElementById('flow-human-name').textContent = i.userName;
+  }
+}
+
+async function loadMiniWidgets(overview, usage) {
+  // 🧠 Thinking Feed
+  document.getElementById('thinking-status').textContent = 'Active';
+  document.getElementById('thinking-latest').textContent = 'Monitoring thoughts...';
+  
+  // 💰 Cost Ticker 
+  function fmtCost(c) { return c >= 0.01 ? '$' + c.toFixed(2) : c > 0 ? '<$0.01' : '$0.00'; }
+  document.getElementById('cost-today').textContent = fmtCost(usage.todayCost || 0);
+  document.getElementById('cost-week').textContent = fmtCost(usage.weekCost || 0);
+  document.getElementById('cost-month').textContent = fmtCost(usage.monthCost || 0);
+  
+  var trend = '';
+  if (usage.trend && usage.trend.trend) {
+    var trendIcon = usage.trend.trend === 'increasing' ? '📈' : usage.trend.trend === 'decreasing' ? '📉' : '➡️';
+    trend = trendIcon + ' ' + usage.trend.trend;
+  }
+  document.getElementById('cost-trend').textContent = trend || 'Today\'s running total';
+  
+  // ⚡ Tool Activity (load from logs)
+  loadToolActivity();
+  
+  // 📊 Token Burn Rate
+  document.getElementById('token-rate').textContent = '—';
+  function fmtTokens(n) { return n >= 1000000 ? (n/1000000).toFixed(1) + 'M' : n >= 1000 ? (n/1000).toFixed(0) + 'K' : String(n); }
+  document.getElementById('tokens-today').textContent = fmtTokens(usage.today || 0);
+  
+  // 🔥 Hot Sessions
+  document.getElementById('hot-sessions-count').textContent = overview.sessionCount || 0;
+  var hotHtml = '';
+  if (overview.sessionCount > 0) {
+    hotHtml = '<div style="font-size:11px;color:#f0c040;">Main session active</div>';
+    if (overview.mainSessionUpdated) {
+      hotHtml += '<div style="font-size:10px;color:#666;">Updated ' + timeAgo(overview.mainSessionUpdated) + '</div>';
+    }
+  } else {
+    hotHtml = '<div style="font-size:11px;color:#666;">No active sessions</div>';
+  }
+  document.getElementById('hot-sessions-list').innerHTML = hotHtml;
+  
+  // 📈 Model Mix
+  document.getElementById('model-primary').textContent = overview.model || 'claude-opus-4-5';
+  var modelBreakdown = '';
+  if (usage.modelBreakdown && usage.modelBreakdown.length > 0) {
+    var primary = usage.modelBreakdown[0];
+    var others = usage.modelBreakdown.slice(1, 3);
+    modelBreakdown = fmtTokens(primary.tokens) + ' tokens';
+    if (others.length > 0) {
+      modelBreakdown += ' (+' + others.length + ' others)';
+    }
+  } else {
+    modelBreakdown = 'Primary model';
+  }
+  document.getElementById('model-breakdown').textContent = modelBreakdown;
+}
+
+async function loadToolActivity() {
+  try {
+    var logs = await fetch('/api/logs?lines=100').then(r => r.json());
+    var toolCounts = { exec: 0, browser: 0, search: 0, other: 0 };
+    var recentTools = [];
+    
+    logs.lines.forEach(function(line) {
+      var msg = line.toLowerCase();
+      if (msg.includes('tool') || msg.includes('invoke')) {
+        if (msg.includes('exec') || msg.includes('shell')) { 
+          toolCounts.exec++; recentTools.push('exec'); 
+        } else if (msg.includes('browser') || msg.includes('screenshot')) { 
+          toolCounts.browser++; recentTools.push('browser'); 
+        } else if (msg.includes('web_search') || msg.includes('web_fetch')) { 
+          toolCounts.search++; recentTools.push('search'); 
+        } else {
+          toolCounts.other++;
+        }
+      }
+    });
+    
+    document.getElementById('tools-active').textContent = recentTools.slice(0, 3).join(', ') || 'Idle';
+    document.getElementById('tools-recent').textContent = 'Last ' + Math.min(logs.lines.length, 100) + ' log entries';
+    
+    var sparks = document.querySelectorAll('.tool-spark span');
+    sparks[0].textContent = toolCounts.exec;
+    sparks[1].textContent = toolCounts.browser;  
+    sparks[2].textContent = toolCounts.search;
+  } catch(e) {
+    document.getElementById('tools-active').textContent = '—';
+  }
+}
+
+async function loadActivityStream() {
+  try {
+    var transcripts = await fetch('/api/transcripts').then(r => r.json());
+    var activities = [];
+    
+    // Get the most recent transcript to parse for activity
+    if (transcripts.transcripts && transcripts.transcripts.length > 0) {
+      var recent = transcripts.transcripts[0];
+      try {
+        var transcript = await fetch('/api/transcript/' + recent.id).then(r => r.json());
+        var recentMessages = transcript.messages.slice(-10); // Last 10 messages
+        
+        recentMessages.forEach(function(msg) {
+          if (msg.role === 'assistant' && msg.content) {
+            var content = msg.content.toLowerCase();
+            var activity = '';
+            var time = new Date(msg.timestamp || Date.now()).toLocaleTimeString();
+            
+            if (content.includes('searching') || content.includes('search')) {
+              activity = time + ' 🔍 Searching web for information';
+            } else if (content.includes('reading') || content.includes('file')) {
+              activity = time + ' 📖 Reading files';
+            } else if (content.includes('writing') || content.includes('edit')) {
+              activity = time + ' ✏️ Editing files'; 
+            } else if (content.includes('exec') || content.includes('command')) {
+              activity = time + ' ⚡ Running commands';
+            } else if (content.includes('browser') || content.includes('screenshot')) {
+              activity = time + ' 🌐 Browser automation';
+            } else if (msg.content.length > 50) {
+              var preview = msg.content.substring(0, 80).replace(/[^\w\s]/g, ' ').trim();
+              activity = time + ' 💭 ' + preview + '...';
+            }
+            
+            if (activity) activities.push(activity);
+          }
+        });
+      } catch(e) {}
+    }
+    
+    if (activities.length === 0) {
+      activities = [
+        new Date().toLocaleTimeString() + ' 🤖 AI agent initialized',
+        new Date().toLocaleTimeString() + ' 📡 Monitoring for activity...'
+      ];
+    }
+    
+    var html = activities.slice(-8).map(function(a) {
+      return '<div style="padding:4px 0; border-bottom:1px solid #1a1a30; color:#ccc;">' + escHtml(a) + '</div>';
+    }).join('');
+    
+    document.getElementById('activity-stream').innerHTML = html;
+  } catch(e) {
+    document.getElementById('activity-stream').innerHTML = '<div style="color:#666;">Error loading activity stream</div>';
+  }
+}
+
+function openDetailView(type) {
+  // Navigate to the appropriate tab with detail view
+  if (type === 'cost' || type === 'tokens') {
+    switchTab('usage');
+  } else if (type === 'sessions') {
+    switchTab('sessions');
+  } else if (type === 'tools') {
+    switchTab('logs');
+  } else {
+    // For thinking feed and models, stay on overview but could expand in future
+    alert('Detail view for ' + type + ' coming soon!');
   }
 }
 
@@ -1150,12 +1467,29 @@ function renderLogs(elId, lines) {
       else cls = 'info';
       var msg = obj.msg || obj.message || obj.name || '';
       var extras = [];
-      if (obj["0"]) extras.push(obj["0"]);
-      if (obj["1"]) extras.push(obj["1"]);
-      if (msg && extras.length) display = msg + ' | ' + extras.join(' ');
-      else if (extras.length) display = extras.join(' ');
-      else if (!msg) display = l.substring(0, 200);
-      else display = msg;
+      // Field "0" is usually a JSON string like {"subsystem":"gateway/ws"} - extract subsystem
+      var subsystem = '';
+      if (obj["0"]) {
+        try { var sub = JSON.parse(obj["0"]); subsystem = sub.subsystem || ''; } catch(e) { subsystem = String(obj["0"]); }
+      }
+      // Field "1" can be a string or object - stringify objects
+      function flatVal(v) { return (typeof v === 'object' && v !== null) ? JSON.stringify(v) : String(v); }
+      if (obj["1"]) {
+        if (typeof obj["1"] === 'object') {
+          var parts = [];
+          for (var k in obj["1"]) { if (k !== 'cause') parts.push(k + '=' + flatVal(obj["1"][k])); else parts.unshift(flatVal(obj["1"][k])); }
+          extras.push(parts.join(' '));
+        } else {
+          extras.push(String(obj["1"]));
+        }
+      }
+      if (obj["2"]) extras.push(flatVal(obj["2"]));
+      // Build display
+      var prefix = subsystem ? '[' + subsystem + '] ' : '';
+      if (msg && extras.length) display = prefix + msg + ' ' + extras.join(' ');
+      else if (extras.length) display = prefix + extras.join(' ');
+      else if (msg) display = prefix + msg;
+      else display = l.substring(0, 200);
       if (ts) display = '<span class="ts">' + ts + '</span> ' + escHtml(display);
       else display = escHtml(display);
     } catch(e) {
@@ -1332,6 +1666,12 @@ async function loadUsage() {
     document.getElementById('usage-week-cost').textContent = '≈ ' + fmtCost(data.weekCost);
     document.getElementById('usage-month').textContent = fmtTokens(data.month);
     document.getElementById('usage-month-cost').textContent = '≈ ' + fmtCost(data.monthCost);
+    
+    // Display cost warnings
+    displayCostWarnings(data.warnings || []);
+    
+    // Display trend analysis
+    displayTrendAnalysis(data.trend || {});
     // Bar chart
     var maxTokens = Math.max.apply(null, data.days.map(function(d){return d.tokens;})) || 1;
     var chartHtml = '';
@@ -1373,6 +1713,56 @@ async function loadUsage() {
   } catch(e) {
     document.getElementById('usage-chart').innerHTML = '<span style="color:#555">No usage data available</span>';
   }
+}
+
+function displayCostWarnings(warnings) {
+  var container = document.getElementById('cost-warnings');
+  if (!warnings || warnings.length === 0) {
+    container.style.display = 'none';
+    return;
+  }
+  
+  var html = '';
+  warnings.forEach(function(w) {
+    var icon = w.level === 'error' ? '🚨' : '⚠️';
+    html += '<div class="cost-warning ' + w.level + '">';
+    html += '<div class="cost-warning-icon">' + icon + '</div>';
+    html += '<div class="cost-warning-message">' + escHtml(w.message) + '</div>';
+    html += '</div>';
+  });
+  
+  container.innerHTML = html;
+  container.style.display = 'block';
+}
+
+function displayTrendAnalysis(trend) {
+  var card = document.getElementById('trend-card');
+  if (!trend || trend.trend === 'insufficient_data') {
+    card.style.display = 'none';
+    return;
+  }
+  
+  var directionEl = document.getElementById('trend-direction');
+  var predictionEl = document.getElementById('trend-prediction');
+  
+  var emoji = trend.trend === 'increasing' ? '📈' : trend.trend === 'decreasing' ? '📉' : '➡️';
+  directionEl.textContent = emoji + ' ' + trend.trend.charAt(0).toUpperCase() + trend.trend.slice(1);
+  
+  if (trend.dailyAvg && trend.monthlyPrediction) {
+    var dailyAvg = trend.dailyAvg >= 1000 ? (trend.dailyAvg/1000).toFixed(0) + 'K' : trend.dailyAvg;
+    var monthlyPred = trend.monthlyPrediction >= 1000000 ? (trend.monthlyPrediction/1000000).toFixed(1) + 'M' : 
+                      trend.monthlyPrediction >= 1000 ? (trend.monthlyPrediction/1000).toFixed(0) + 'K' : trend.monthlyPrediction;
+    predictionEl.textContent = dailyAvg + '/day avg, ~' + monthlyPred + '/month projected';
+  } else {
+    predictionEl.textContent = 'Analyzing usage patterns...';
+  }
+  
+  card.style.display = 'block';
+}
+
+function exportUsageData() {
+  // Trigger CSV download
+  window.open('/api/usage/export', '_blank');
 }
 
 // ===== Transcripts =====
@@ -1543,6 +1933,10 @@ var flowInitDone = false;
 function initFlow() {
   if (flowInitDone) return;
   flowInitDone = true;
+  
+  // Performance: Reduce update frequency on mobile
+  var updateInterval = window.innerWidth < 768 ? 3000 : 2000;
+  
   fetch('/api/overview').then(function(r){return r.json();}).then(function(d) {
     var el = document.getElementById('brain-model-text');
     if (el && d.model) el.textContent = d.model;
@@ -1553,8 +1947,48 @@ function initFlow() {
     }
     var tok = document.getElementById('flow-tokens');
     if (tok) tok.textContent = (d.mainTokens / 1000).toFixed(0) + 'K';
+    
+    // Add visual hierarchy hints
+    setTimeout(function() {
+      enhanceArchitectureClarity();
+    }, 1000);
   }).catch(function(){});
-  setInterval(updateFlowStats, 2000);
+  
+  setInterval(updateFlowStats, updateInterval);
+}
+
+// Add subtle animation to help users understand the flow
+function enhanceArchitectureClarity() {
+  // Gentle pulse on key nodes to show importance hierarchy
+  var keyNodes = ['node-human', 'node-gateway', 'node-brain'];
+  keyNodes.forEach(function(nodeId, index) {
+    setTimeout(function() {
+      var node = document.getElementById(nodeId);
+      if (node) {
+        node.style.animation = 'none';
+        setTimeout(function() {
+          node.style.animation = '';
+        }, 100);
+      }
+    }, index * 800);
+  });
+  
+  // Highlight the main message flow path briefly
+  var paths = ['path-human-tg', 'path-tg-gw', 'path-gw-brain'];
+  paths.forEach(function(pathId, index) {
+    setTimeout(function() {
+      var path = document.getElementById(pathId);
+      if (path) {
+        path.style.opacity = '0.8';
+        path.style.strokeWidth = '3';
+        path.style.transition = 'all 0.5s ease';
+        setTimeout(function() {
+          path.style.opacity = '';
+          path.style.strokeWidth = '';
+        }, 1500);
+      }
+    }, index * 200);
+  });
 }
 
 function updateFlowStats() {
@@ -1575,55 +2009,104 @@ function updateFlowStats() {
   }
 }
 
+// Enhanced particle animation with performance optimizations and better mobile support
+var particlePool = [];
+var trailPool = [];
+var maxParticles = window.innerWidth < 768 ? 3 : 8; // Limit particles on mobile
+var trailInterval = window.innerWidth < 768 ? 8 : 4; // Fewer trails on mobile
+
+function getPooledParticle(isTrail) {
+  var pool = isTrail ? trailPool : particlePool;
+  if (pool.length > 0) return pool.pop();
+  var elem = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+  elem.setAttribute('r', isTrail ? '2' : '5');
+  return elem;
+}
+
+function returnToPool(elem, isTrail) {
+  var pool = isTrail ? trailPool : particlePool;
+  elem.style.opacity = '0';
+  elem.style.transform = '';
+  if (pool.length < 20) pool.push(elem); // Pool size limit
+  else if (elem.parentNode) elem.parentNode.removeChild(elem);
+}
+
 function animateParticle(pathId, color, duration, reverse) {
   var path = document.getElementById(pathId);
   if (!path) return;
   var svg = document.getElementById('flow-svg');
   if (!svg) return;
+  
+  // Skip if too many particles (performance)
+  var activeParticles = svg.querySelectorAll('circle[data-particle]').length;
+  if (activeParticles > maxParticles) return;
+  
   var len = path.getTotalLength();
-  var particle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-  particle.setAttribute('r', '5');
+  var particle = getPooledParticle(false);
+  particle.setAttribute('data-particle', 'true');
   particle.setAttribute('fill', color);
   particle.style.filter = 'drop-shadow(0 0 8px ' + color + ')';
+  particle.style.opacity = '1';
   svg.appendChild(particle);
+  
   var glowCls = color === '#60a0ff' ? 'glow-blue' : color === '#f0c040' ? 'glow-yellow' : color === '#50e080' ? 'glow-green' : color === '#40a0b0' ? 'glow-cyan' : color === '#c0a0ff' ? 'glow-purple' : 'glow-red';
   path.classList.add(glowCls);
+  
   var startT = performance.now();
   var trailN = 0;
+  var trailElements = [];
+  
   function step(now) {
     var t = Math.min((now - startT) / duration, 1);
     var dist = reverse ? (1 - t) * len : t * len;
+    
     try {
       var pt = path.getPointAtLength(dist);
       particle.setAttribute('cx', pt.x);
       particle.setAttribute('cy', pt.y);
-    } catch(e) { particle.remove(); path.classList.remove(glowCls); return; }
-    if (trailN++ % 4 === 0) {
-      var tr = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    } catch(e) { 
+      cleanup();
+      return; 
+    }
+    
+    // Create trail less frequently, and only if not too many already
+    if (trailN++ % trailInterval === 0 && trailElements.length < 6) {
+      var tr = getPooledParticle(true);
       tr.setAttribute('cx', particle.getAttribute('cx'));
       tr.setAttribute('cy', particle.getAttribute('cy'));
-      tr.setAttribute('r', '3');
       tr.setAttribute('fill', color);
-      tr.setAttribute('opacity', '0.5');
+      tr.style.opacity = '0.6';
+      tr.style.filter = 'blur(0.5px)';
       svg.insertBefore(tr, particle);
-      var trS = now;
-      (function(el, s) {
-        function fade(n) {
-          var a = (n - s) / 400;
-          if (a >= 1) { el.remove(); return; }
-          el.setAttribute('opacity', String(0.5 * (1 - a)));
-          el.setAttribute('r', String(3 * (1 - a * 0.5)));
-          requestAnimationFrame(fade);
-        }
-        requestAnimationFrame(fade);
-      })(tr, trS);
+      trailElements.push(tr);
+      
+      // Fade trail with CSS transition instead of JS animation
+      setTimeout(function() {
+        tr.style.transition = 'opacity 400ms ease-out, transform 400ms ease-out';
+        tr.style.opacity = '0';
+        tr.style.transform = 'scale(0.3)';
+        setTimeout(function() { 
+          if (tr.parentNode) tr.parentNode.removeChild(tr);
+          returnToPool(tr, true);
+        }, 450);
+      }, 50);
     }
-    if (t < 1) requestAnimationFrame(step);
-    else {
-      particle.remove();
-      setTimeout(function() { path.classList.remove(glowCls); }, 400);
+    
+    if (t < 1) {
+      requestAnimationFrame(step);
+    } else {
+      cleanup();
     }
   }
+  
+  function cleanup() {
+    if (particle.parentNode) particle.parentNode.removeChild(particle);
+    returnToPool(particle, false);
+    setTimeout(function() { 
+      path.classList.remove(glowCls); 
+    }, 400);
+  }
+  
   requestAnimationFrame(step);
 }
 
@@ -1793,6 +2276,16 @@ function processFlowEvent(line) {
     return;
   }
 }
+
+// Initialize theme on page load
+document.addEventListener('DOMContentLoaded', function() {
+  initTheme();
+  // Initialize Flow page by default
+  initFlow();
+  
+  // Load data for all sections
+  loadAll();
+});
 </script>
 </body>
 </html>
@@ -1803,7 +2296,9 @@ function processFlowEvent(line) {
 
 @app.route('/')
 def index():
-    return render_template_string(DASHBOARD_HTML)
+    resp = make_response(render_template_string(DASHBOARD_HTML))
+    resp.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+    return resp
 
 
 @app.route('/api/overview')
@@ -2010,88 +2505,367 @@ def api_otel_status():
     })
 
 
+# ── Enhanced Cost Tracking Utilities ─────────────────────────────────────
+
+def _get_model_pricing():
+    """Model-specific pricing per 1M tokens (input, output)."""
+    return {
+        'claude-opus': (15.0, 75.0),      # Claude 3 Opus
+        'claude-sonnet': (3.0, 15.0),     # Claude 3 Sonnet  
+        'claude-haiku': (0.25, 1.25),     # Claude 3 Haiku
+        'gpt-4': (10.0, 30.0),            # GPT-4 Turbo
+        'gpt-3.5': (1.0, 2.0),            # GPT-3.5 Turbo
+        'default': (15.0, 45.0),          # Conservative estimate
+    }
+
+def _calculate_enhanced_costs(daily_tokens, today_str, week_start, month_start):
+    """Enhanced cost calculation with model-specific pricing."""
+    pricing = _get_model_pricing()
+    
+    # For log parsing fallback, assume 60/40 input/output ratio
+    input_ratio, output_ratio = 0.6, 0.4
+    
+    def calc_cost(tokens, model_key='default'):
+        if tokens == 0:
+            return 0.0
+        in_price, out_price = pricing.get(model_key, pricing['default'])
+        input_cost = (tokens * input_ratio) * (in_price / 1_000_000)
+        output_cost = (tokens * output_ratio) * (out_price / 1_000_000)
+        return input_cost + output_cost
+    
+    today_tok = daily_tokens.get(today_str, 0)
+    week_tok = sum(v for k, v in daily_tokens.items() if k >= week_start)
+    month_tok = sum(v for k, v in daily_tokens.items() if k >= month_start)
+    
+    return (
+        round(calc_cost(today_tok), 4),
+        round(calc_cost(week_tok), 4), 
+        round(calc_cost(month_tok), 4)
+    )
+
+def _analyze_usage_trends(daily_tokens):
+    """Analyze usage trends for predictions."""
+    if len(daily_tokens) < 3:
+        return {'prediction': None, 'trend': 'insufficient_data'}
+    
+    # Get last 7 days of data
+    recent_days = sorted(daily_tokens.items())[-7:]
+    if len(recent_days) < 3:
+        return {'prediction': None, 'trend': 'insufficient_data'}
+    
+    tokens_series = [v for k, v in recent_days]
+    
+    # Simple trend analysis
+    if len(tokens_series) >= 3:
+        recent_avg = sum(tokens_series[-3:]) / 3
+        older_avg = sum(tokens_series[:-3]) / max(1, len(tokens_series) - 3) if len(tokens_series) > 3 else recent_avg
+        
+        if recent_avg > older_avg * 1.2:
+            trend = 'increasing'
+        elif recent_avg < older_avg * 0.8:
+            trend = 'decreasing'
+        else:
+            trend = 'stable'
+        
+        # Monthly prediction based on recent average
+        daily_avg = sum(tokens_series[-7:]) / len(tokens_series[-7:])
+        monthly_prediction = daily_avg * 30
+        
+        return {
+            'trend': trend,
+            'dailyAvg': int(daily_avg),
+            'monthlyPrediction': int(monthly_prediction),
+        }
+    
+    return {'prediction': None, 'trend': 'stable'}
+
+def _generate_cost_warnings(today_cost, week_cost, month_cost, trend_data):
+    """Generate cost warnings based on thresholds."""
+    warnings = []
+    
+    # Daily cost warnings
+    if today_cost > 10.0:
+        warnings.append({
+            'type': 'high_daily_cost',
+            'level': 'error',
+            'message': f'High daily cost: ${today_cost:.2f} (threshold: $10)',
+        })
+    elif today_cost > 5.0:
+        warnings.append({
+            'type': 'elevated_daily_cost', 
+            'level': 'warning',
+            'message': f'Elevated daily cost: ${today_cost:.2f}',
+        })
+    
+    # Weekly cost warnings  
+    if week_cost > 50.0:
+        warnings.append({
+            'type': 'high_weekly_cost',
+            'level': 'error', 
+            'message': f'High weekly cost: ${week_cost:.2f} (threshold: $50)',
+        })
+    elif week_cost > 25.0:
+        warnings.append({
+            'type': 'elevated_weekly_cost',
+            'level': 'warning',
+            'message': f'Elevated weekly cost: ${week_cost:.2f}',
+        })
+    
+    # Monthly cost warnings
+    if month_cost > 200.0:
+        warnings.append({
+            'type': 'high_monthly_cost',
+            'level': 'error',
+            'message': f'High monthly cost: ${month_cost:.2f} (threshold: $200)', 
+        })
+    elif month_cost > 100.0:
+        warnings.append({
+            'type': 'elevated_monthly_cost',
+            'level': 'warning', 
+            'message': f'Elevated monthly cost: ${month_cost:.2f}',
+        })
+    
+    # Trend-based warnings
+    if trend_data.get('trend') == 'increasing' and trend_data.get('monthlyPrediction', 0) > 300:
+        warnings.append({
+            'type': 'trend_warning',
+            'level': 'warning',
+            'message': f'Usage trending up - projected monthly cost: ${(trend_data["monthlyPrediction"] * 0.00003):.2f}',
+        })
+    
+    return warnings
+
 # ── New Feature APIs ────────────────────────────────────────────────────
 
 @app.route('/api/usage')
 def api_usage():
-    """Token/cost tracking — OTLP data preferred, falls back to log parsing."""
+    """Token/cost tracking from transcript files — Enhanced OTLP workaround."""
     # Prefer OTLP data when available
     if _has_otel_data():
         return jsonify(_get_otel_usage_data())
 
-    # Fallback: parse session JSONL files
-    sessions_dir = SESSIONS_DIR or os.path.expanduser('~/.clawdbot/agents/main/sessions')
+    # NEW: Parse transcript JSONL files for real usage data
+    sessions_dir = SESSIONS_DIR or os.path.expanduser('~/.moltbot/agents/main/sessions')
     daily_tokens = {}
+    daily_cost = {}
+    model_usage = {}
+    session_costs = {}
+    
     if os.path.isdir(sessions_dir):
         for fname in os.listdir(sessions_dir):
             if not fname.endswith('.jsonl'):
                 continue
             fpath = os.path.join(sessions_dir, fname)
+            session_cost = 0
+            
             try:
-                fmtime = datetime.fromtimestamp(os.path.getmtime(fpath))
                 with open(fpath, 'r') as f:
                     for line in f:
                         try:
                             obj = json.loads(line.strip())
-                            # Extract tokens from various possible fields
-                            tokens = 0
-                            usage = obj.get('usage') or obj.get('tokens_used') or {}
-                            if isinstance(usage, dict):
-                                tokens = (usage.get('total_tokens') or usage.get('totalTokens')
-                                          or (usage.get('input_tokens', 0) + usage.get('output_tokens', 0))
-                                          or 0)
-                            elif isinstance(usage, (int, float)):
-                                tokens = int(usage)
-                            # If no explicit tokens, estimate from content length
-                            if not tokens:
-                                content = obj.get('content', '')
-                                if isinstance(content, str) and len(content) > 0:
-                                    tokens = max(1, len(content) // 4)  # rough: 1 token ≈ 4 chars
-                                elif isinstance(content, list):
-                                    total_len = sum(len(str(c.get('text', ''))) for c in content if isinstance(c, dict))
-                                    tokens = max(1, total_len // 4) if total_len else 0
-                            # Get date
-                            ts = obj.get('timestamp') or obj.get('time') or obj.get('created_at')
-                            if ts:
-                                if isinstance(ts, (int, float)):
-                                    dt = datetime.fromtimestamp(ts / 1000 if ts > 1e12 else ts)
-                                else:
-                                    try:
-                                        dt = datetime.fromisoformat(str(ts).replace('Z', '+00:00'))
-                                    except Exception:
-                                        dt = fmtime
+                            
+                            # Only process message entries with usage data
+                            if obj.get('type') != 'message':
+                                continue
+                                
+                            message = obj.get('message', {})
+                            usage = message.get('usage')
+                            if not usage or not isinstance(usage, dict):
+                                continue
+                                
+                            # Extract the exact usage format from the brief
+                            tokens_data = {
+                                'input': usage.get('input', 0),
+                                'output': usage.get('output', 0),
+                                'cacheRead': usage.get('cacheRead', 0),
+                                'cacheWrite': usage.get('cacheWrite', 0),
+                                'totalTokens': usage.get('totalTokens', 0),
+                                'cost': usage.get('cost', {})
+                            }
+                            
+                            cost_data = tokens_data['cost']
+                            if isinstance(cost_data, dict) and 'total' in cost_data:
+                                total_cost = float(cost_data['total'])
                             else:
-                                dt = fmtime
-                            day = dt.strftime('%Y-%m-%d')
-                            if tokens > 0:
-                                daily_tokens[day] = daily_tokens.get(day, 0) + tokens
-                        except (json.JSONDecodeError, ValueError):
-                            pass
+                                total_cost = 0.0
+                            
+                            # Extract model name
+                            model = message.get('model', 'unknown') or 'unknown'
+                            
+                            # Get timestamp and convert to date
+                            ts = obj.get('timestamp')
+                            if ts:
+                                # Handle ISO timestamp strings
+                                if isinstance(ts, str):
+                                    try:
+                                        dt = datetime.fromisoformat(ts.replace('Z', '+00:00'))
+                                    except:
+                                        continue
+                                else:
+                                    # Handle numeric timestamps
+                                    dt = datetime.fromtimestamp(ts / 1000 if ts > 1e12 else ts)
+                                
+                                day = dt.strftime('%Y-%m-%d')
+                                
+                                # Aggregate daily tokens and costs
+                                daily_tokens[day] = daily_tokens.get(day, 0) + tokens_data['totalTokens']
+                                daily_cost[day] = daily_cost.get(day, 0) + total_cost
+                                
+                                # Track model usage
+                                model_usage[model] = model_usage.get(model, 0) + tokens_data['totalTokens']
+                                
+                                # Track session costs
+                                session_cost += total_cost
+                                
+                        except (json.JSONDecodeError, ValueError, KeyError):
+                            continue
+                            
+                # Store session cost
+                session_costs[fname.replace('.jsonl', '')] = session_cost
+                        
             except Exception:
-                pass
+                continue
 
+    # Build response data
     today = datetime.now()
     days = []
     for i in range(13, -1, -1):
         d = today - timedelta(days=i)
         ds = d.strftime('%Y-%m-%d')
-        days.append({'date': ds, 'tokens': daily_tokens.get(ds, 0)})
+        days.append({
+            'date': ds, 
+            'tokens': daily_tokens.get(ds, 0),
+            'cost': daily_cost.get(ds, 0)
+        })
 
+    # Calculate aggregations
     today_str = today.strftime('%Y-%m-%d')
     week_start = (today - timedelta(days=today.weekday())).strftime('%Y-%m-%d')
     month_start = today.strftime('%Y-%m-01')
+    
     today_tok = daily_tokens.get(today_str, 0)
     week_tok = sum(v for k, v in daily_tokens.items() if k >= week_start)
     month_tok = sum(v for k, v in daily_tokens.items() if k >= month_start)
-    # Cost estimates: Claude Opus ~$15/M in + $75/M out; average ~$30/M
-    cpt = 30.0 / 1_000_000
+    
+    today_cost = daily_cost.get(today_str, 0)
+    week_cost = sum(v for k, v in daily_cost.items() if k >= week_start)
+    month_cost = sum(v for k, v in daily_cost.items() if k >= month_start)
+    
+    # Trend analysis & predictions
+    trend_data = _analyze_usage_trends(daily_tokens)
+    
+    # Cost warnings
+    warnings = _generate_cost_warnings(today_cost, week_cost, month_cost, trend_data)
+    
+    # Model breakdown for display
+    model_breakdown = [
+        {'model': k, 'tokens': v}
+        for k, v in sorted(model_usage.items(), key=lambda x: -x[1])
+    ]
+    
     return jsonify({
-        'days': days, 'today': today_tok, 'week': week_tok, 'month': month_tok,
-        'todayCost': round(today_tok * cpt, 2),
-        'weekCost': round(week_tok * cpt, 2),
-        'monthCost': round(month_tok * cpt, 2),
+        'source': 'transcripts',
+        'days': days,
+        'today': today_tok,
+        'week': week_tok, 
+        'month': month_tok,
+        'todayCost': round(today_cost, 4),
+        'weekCost': round(week_cost, 4),
+        'monthCost': round(month_cost, 4),
+        'modelBreakdown': model_breakdown,
+        'sessionCosts': session_costs,
+        'trend': trend_data,
+        'warnings': warnings,
     })
 
+
+@app.route('/api/usage/export')
+def api_usage_export():
+    """Export usage data as CSV."""
+    try:
+        # Get usage data
+        if _has_otel_data():
+            data = _get_otel_usage_data()
+        else:
+            # Call the same logic as /api/usage but get full data
+            sessions_dir = SESSIONS_DIR or os.path.expanduser('~/.clawdbot/agents/main/sessions')
+            daily_tokens = {}
+            
+            if os.path.isdir(sessions_dir):
+                for fname in os.listdir(sessions_dir):
+                    if not fname.endswith('.jsonl'):
+                        continue
+                    fpath = os.path.join(sessions_dir, fname)
+                    try:
+                        fmtime = datetime.fromtimestamp(os.path.getmtime(fpath))
+                        with open(fpath, 'r') as f:
+                            for line in f:
+                                try:
+                                    obj = json.loads(line.strip())
+                                    tokens = 0
+                                    usage = obj.get('usage') or obj.get('tokens_used') or {}
+                                    if isinstance(usage, dict):
+                                        tokens = (usage.get('total_tokens') or usage.get('totalTokens')
+                                                  or (usage.get('input_tokens', 0) + usage.get('output_tokens', 0))
+                                                  or 0)
+                                    elif isinstance(usage, (int, float)):
+                                        tokens = int(usage)
+                                    if not tokens:
+                                        content = obj.get('content', '')
+                                        if isinstance(content, str) and len(content) > 0:
+                                            tokens = max(1, len(content) // 4)
+                                        elif isinstance(content, list):
+                                            total_len = sum(len(str(c.get('text', ''))) for c in content if isinstance(c, dict))
+                                            tokens = max(1, total_len // 4) if total_len else 0
+                                    ts = obj.get('timestamp') or obj.get('time') or obj.get('created_at')
+                                    if ts:
+                                        if isinstance(ts, (int, float)):
+                                            dt = datetime.fromtimestamp(ts / 1000 if ts > 1e12 else ts)
+                                        else:
+                                            try:
+                                                dt = datetime.fromisoformat(str(ts).replace('Z', '+00:00'))
+                                            except Exception:
+                                                dt = fmtime
+                                    else:
+                                        dt = fmtime
+                                    day = dt.strftime('%Y-%m-%d')
+                                    if tokens > 0:
+                                        daily_tokens[day] = daily_tokens.get(day, 0) + tokens
+                                except (json.JSONDecodeError, ValueError):
+                                    pass
+                    except Exception:
+                        pass
+            
+            today = datetime.now()
+            today_str = today.strftime('%Y-%m-%d')
+            week_start = (today - timedelta(days=today.weekday())).strftime('%Y-%m-%d')
+            month_start = today.strftime('%Y-%m-01')
+            
+            # Build data structure similar to OTLP
+            days = []
+            for i in range(30, -1, -1):  # Last 30 days for export
+                d = today - timedelta(days=i)
+                ds = d.strftime('%Y-%m-%d')
+                tokens = daily_tokens.get(ds, 0)
+                cost = round(tokens * (30.0 / 1_000_000), 4)  # Default pricing
+                days.append({'date': ds, 'tokens': tokens, 'cost': cost})
+                
+            data = {'days': days}
+        
+        # Generate CSV content
+        csv_lines = ['Date,Tokens,Cost']
+        for day in data['days']:
+            csv_lines.append(f"{day['date']},{day['tokens']},{day.get('cost', 0):.4f}")
+        
+        csv_content = '\n'.join(csv_lines)
+        
+        response = make_response(csv_content)
+        response.headers['Content-Type'] = 'text/csv'
+        response.headers['Content-Disposition'] = f'attachment; filename=openclaw-usage-{datetime.now().strftime("%Y%m%d")}.csv'
+        return response
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/api/transcripts')
 def api_transcripts():
@@ -2465,7 +3239,7 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="Environment variables:\n"
                "  OPENCLAW_HOME         Agent workspace directory\n"
-               "  OPENCLAW_LOG_DIR      Log directory (default: /tmp/moltbot)\n"
+               "  OPENCLAW_LOG_DIR      Log directory (default: auto-detected)\n"
                "  OPENCLAW_METRICS_FILE Path to metrics persistence JSON file\n"
                "  OPENCLAW_USER         Your name in the Flow visualization\n"
     )
