@@ -793,6 +793,33 @@ DASHBOARD_HTML = r"""
   .card:hover { transform: translateY(-2px); transition: all 0.2s ease; box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
   .card[onclick] { cursor: pointer; }
 
+  /* === Sub-Agent Worker Bees === */
+  .subagent-item { display: flex; align-items: center; gap: 6px; padding: 2px 0; font-size: 10px; }
+  .subagent-status { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+  .subagent-status.active { background: #27ae60; box-shadow: 0 0 4px rgba(39,174,96,0.5); }
+  .subagent-status.idle { background: #f0c040; box-shadow: 0 0 4px rgba(240,192,64,0.5); }
+  .subagent-status.stale { background: #e74c3c; box-shadow: 0 0 4px rgba(231,76,60,0.5); }
+  .subagent-name { font-weight: 600; color: var(--text-secondary); }
+  .subagent-task { color: var(--text-muted); font-size: 9px; }
+  .subagent-runtime { color: var(--text-faint); font-size: 9px; margin-left: auto; }
+
+  /* === Sub-Agent Detailed View === */
+  .subagent-row { padding: 12px 16px; border-bottom: 1px solid var(--border-secondary); display: flex; align-items: center; gap: 12px; }
+  .subagent-row:last-child { border-bottom: none; }
+  .subagent-row:hover { background: var(--bg-hover); }
+  .subagent-indicator { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; }
+  .subagent-indicator.active { background: #27ae60; box-shadow: 0 0 8px rgba(39,174,96,0.6); animation: pulse 2s infinite; }
+  .subagent-indicator.idle { background: #f0c040; box-shadow: 0 0 8px rgba(240,192,64,0.6); }
+  .subagent-indicator.stale { background: #e74c3c; box-shadow: 0 0 8px rgba(231,76,60,0.6); opacity: 0.7; }
+  .subagent-info { flex: 1; }
+  .subagent-header { display: flex; justify-content: between; align-items: center; margin-bottom: 4px; }
+  .subagent-id { font-weight: 600; font-size: 14px; color: var(--text-primary); }
+  .subagent-runtime-badge { background: var(--bg-accent); color: var(--bg-primary); padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 600; }
+  .subagent-meta { font-size: 12px; color: var(--text-muted); display: flex; gap: 16px; flex-wrap: wrap; }
+  .subagent-meta span { display: flex; align-items: center; gap: 4px; }
+  .subagent-description { font-size: 13px; color: var(--text-secondary); margin-top: 4px; }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.5; } }
+
   /* === Zoom Wrapper === */
   .zoom-wrapper { transform-origin: top left; transition: transform 0.3s ease; }
 
@@ -845,6 +872,7 @@ DASHBOARD_HTML = r"""
     <div class="nav-tab" onclick="switchTab('overview')">Overview</div>
     <div class="nav-tab" onclick="switchTab('usage')">📊 Usage</div>
     <div class="nav-tab" onclick="switchTab('sessions')">Sessions</div>
+    <div class="nav-tab" onclick="switchTab('subagents')">🐝 Workers</div>
     <div class="nav-tab" onclick="switchTab('crons')">Crons</div>
     <div class="nav-tab" onclick="switchTab('logs')">Logs</div>
     <div class="nav-tab" onclick="switchTab('memory')">Memory</div>
@@ -920,6 +948,24 @@ DASHBOARD_HTML = r"""
       <div class="card-sub">Primary model usage</div>
       <div style="margin-top:8px;">
         <div style="font-size:10px; color:#666;" id="model-breakdown">Loading mix...</div>
+      </div>
+    </div>
+
+    <!-- 🐝 Worker Bees (Sub-Agents) -->
+    <div class="card" onclick="openDetailView('subagents')" style="cursor:pointer;">
+      <div class="card-title"><span class="icon">🐝</span> Worker Bees</div>
+      <div class="card-value" id="subagents-count">—</div>
+      <div class="card-sub" id="subagents-status">Sub-agents spawned</div>
+      <div style="margin-top:10px; max-height:60px; overflow:hidden;" id="subagents-preview">Loading workforce...</div>
+    </div>
+
+    <!-- 🎯 Task Pipeline -->
+    <div class="card" onclick="openDetailView('pipeline')" style="cursor:pointer;">
+      <div class="card-title"><span class="icon">🎯</span> Task Pipeline</div>
+      <div class="card-value" id="pipeline-active">—</div>
+      <div class="card-sub">Active workflows</div>
+      <div style="margin-top:8px;">
+        <div style="font-size:10px; color:#666;" id="pipeline-summary">Pipeline status...</div>
       </div>
     </div>
   </div>
@@ -1004,6 +1050,41 @@ DASHBOARD_HTML = r"""
 <div class="page" id="page-sessions">
   <div class="refresh-bar"><button class="refresh-btn" onclick="loadSessions()">↻ Refresh</button></div>
   <div class="card" id="sessions-list">Loading...</div>
+</div>
+
+<!-- SUB-AGENTS -->
+<div class="page" id="page-subagents">
+  <div class="refresh-bar">
+    <button class="refresh-btn" onclick="loadSubAgentsPage()">↻ Refresh</button>
+    <span style="margin-left: 16px; font-size: 12px; color: #666;">🐝 AI Workforce Dashboard</span>
+  </div>
+  
+  <!-- Sub-Agent Stats Overview -->
+  <div class="grid">
+    <div class="card">
+      <div class="card-title"><span class="icon">🟢</span> Active</div>
+      <div class="card-value" id="subagents-active-count">—</div>
+      <div class="card-sub">Working now</div>
+    </div>
+    <div class="card">
+      <div class="card-title"><span class="icon">🟡</span> Idle</div>
+      <div class="card-value" id="subagents-idle-count">—</div>
+      <div class="card-sub">Standing by</div>
+    </div>
+    <div class="card">
+      <div class="card-title"><span class="icon">🔴</span> Stale</div>
+      <div class="card-value" id="subagents-stale-count">—</div>
+      <div class="card-sub">Disconnected</div>
+    </div>
+    <div class="card">
+      <div class="card-title"><span class="icon">⚡</span> Total Spawned</div>
+      <div class="card-value" id="subagents-total-count">—</div>
+      <div class="card-sub">All time workers</div>
+    </div>
+  </div>
+  
+  <div class="section-title">🐝 Active Worker Bees</div>
+  <div class="card" id="subagents-list">Loading workforce...</div>
 </div>
 
 <!-- CRONS -->
@@ -1223,6 +1304,7 @@ function switchTab(name) {
   if (name === 'overview') loadAll();
   if (name === 'usage') loadUsage();
   if (name === 'sessions') loadSessions();
+  if (name === 'subagents') loadSubAgentsPage();
   if (name === 'crons') loadCrons();
   if (name === 'logs') loadLogs();
   if (name === 'memory') loadMemory();
@@ -1427,6 +1509,64 @@ async function loadMiniWidgets(overview, usage) {
     modelBreakdown = 'Primary model';
   }
   document.getElementById('model-breakdown').textContent = modelBreakdown;
+  
+  // 🐝 Worker Bees (Sub-Agents)
+  loadSubAgents();
+  
+  // 🎯 Task Pipeline
+  document.getElementById('pipeline-active').textContent = '—';
+  document.getElementById('pipeline-summary').textContent = 'Analyzing workflows...';
+}
+
+async function loadSubAgents() {
+  try {
+    var data = await fetch('/api/subagents').then(r => r.json());
+    var counts = data.counts;
+    var subagents = data.subagents;
+    
+    // Update main counter
+    document.getElementById('subagents-count').textContent = counts.total;
+    
+    // Update status text
+    var statusText = '';
+    if (counts.active > 0) {
+      statusText = counts.active + ' active';
+      if (counts.idle > 0) statusText += ', ' + counts.idle + ' idle';
+      if (counts.stale > 0) statusText += ', ' + counts.stale + ' stale';
+    } else if (counts.total === 0) {
+      statusText = 'No sub-agents spawned';
+    } else {
+      statusText = 'All idle/stale';
+    }
+    document.getElementById('subagents-status').textContent = statusText;
+    
+    // Update preview with top sub-agents
+    var previewHtml = '';
+    if (subagents.length === 0) {
+      previewHtml = '<div style="font-size:11px;color:#666;">No worker bees active</div>';
+    } else {
+      var topAgents = subagents.slice(0, 3); // Show top 3
+      topAgents.forEach(function(agent) {
+        previewHtml += '<div class="subagent-item">';
+        previewHtml += '<div class="subagent-status ' + agent.status + '"></div>';
+        previewHtml += '<span class="subagent-name">' + agent.displayName + '</span>';
+        previewHtml += '<span class="subagent-task">: ' + agent.task + '</span>';
+        previewHtml += '<span class="subagent-runtime">' + agent.runtime + '</span>';
+        previewHtml += '</div>';
+      });
+      
+      if (subagents.length > 3) {
+        previewHtml += '<div style="font-size:9px;color:#555;margin-top:4px;">+' + (subagents.length - 3) + ' more workers</div>';
+      }
+    }
+    
+    document.getElementById('subagents-preview').innerHTML = previewHtml;
+    
+  } catch(e) {
+    document.getElementById('subagents-count').textContent = '?';
+    document.getElementById('subagents-status').textContent = 'Error loading sub-agents';
+    document.getElementById('subagents-preview').innerHTML = '<div style="color:#e74c3c;font-size:11px;">Failed to load workforce</div>';
+  }
 }
 
 async function loadToolActivity() {
@@ -1518,12 +1658,68 @@ async function loadActivityStream() {
   }
 }
 
+async function loadSubAgentsPage() {
+  try {
+    var data = await fetch('/api/subagents').then(r => r.json());
+    var counts = data.counts;
+    var subagents = data.subagents;
+    
+    // Update stats cards
+    document.getElementById('subagents-active-count').textContent = counts.active;
+    document.getElementById('subagents-idle-count').textContent = counts.idle;
+    document.getElementById('subagents-stale-count').textContent = counts.stale;
+    document.getElementById('subagents-total-count').textContent = counts.total;
+    
+    // Build detailed list
+    var listHtml = '';
+    if (subagents.length === 0) {
+      listHtml = '<div style="padding:40px;text-align:center;color:#666;">';
+      listHtml += '<div style="font-size:48px;margin-bottom:16px;">🐝</div>';
+      listHtml += '<div style="font-size:16px;margin-bottom:8px;">No Worker Bees Active</div>';
+      listHtml += '<div style="font-size:12px;">Sub-agents will appear here when spawned by the main agent</div>';
+      listHtml += '</div>';
+    } else {
+      subagents.forEach(function(agent) {
+        listHtml += '<div class="subagent-row">';
+        listHtml += '<div class="subagent-indicator ' + agent.status + '" title="Status: ' + agent.status + '"></div>';
+        listHtml += '<div class="subagent-info">';
+        listHtml += '<div class="subagent-header">';
+        listHtml += '<span class="subagent-id">' + escHtml(agent.displayName) + '</span>';
+        listHtml += '<span class="subagent-runtime-badge">' + agent.runtime + '</span>';
+        listHtml += '</div>';
+        listHtml += '<div class="subagent-description">' + escHtml(agent.task) + '</div>';
+        listHtml += '<div class="subagent-meta">';
+        listHtml += '<span>🤖 Model: ' + escHtml(agent.model) + '</span>';
+        listHtml += '<span>📡 Channel: ' + escHtml(agent.channel) + '</span>';
+        if (agent.totalTokens > 0) {
+          var tokenDisplay = agent.totalTokens >= 1000 ? (agent.totalTokens/1000).toFixed(0) + 'K' : agent.totalTokens;
+          listHtml += '<span>🎯 Tokens: ' + tokenDisplay + '</span>';
+        }
+        listHtml += '<span>🆔 ' + agent.uuid + '</span>';
+        if (agent.updatedAt) {
+          listHtml += '<span>⏰ Updated: ' + timeAgo(agent.updatedAt) + '</span>';
+        }
+        listHtml += '</div>';
+        listHtml += '</div>';
+        listHtml += '</div>';
+      });
+    }
+    
+    document.getElementById('subagents-list').innerHTML = listHtml;
+    
+  } catch(e) {
+    document.getElementById('subagents-list').innerHTML = '<div style="padding:20px;color:#e74c3c;text-align:center;">Failed to load sub-agents: ' + e.message + '</div>';
+  }
+}
+
 function openDetailView(type) {
   // Navigate to the appropriate tab with detail view
   if (type === 'cost' || type === 'tokens') {
     switchTab('usage');
   } else if (type === 'sessions') {
     switchTab('sessions');
+  } else if (type === 'subagents') {
+    switchTab('subagents');
   } else if (type === 'tools') {
     switchTab('logs');
   } else {
@@ -3076,6 +3272,158 @@ def api_transcript(session_id):
         'duration': duration,
         'messages': messages[:500],  # Cap at 500 messages
     })
+
+
+@app.route('/api/subagents')
+def api_subagents():
+    """Get information about active sub-agents."""
+    sessions = _get_sessions()
+    subagents = []
+    
+    for session in sessions:
+        key = session.get('key', '')
+        
+        # Filter for sub-agent sessions (pattern: agent:main:subagent:UUID)
+        if ':subagent:' in key and not key.endswith(':main'):
+            # Extract UUID and create display info
+            parts = key.split(':')
+            if len(parts) >= 4:
+                uuid = parts[-1]
+                display_name = f"SubAgent-{uuid[:8]}"
+                
+                # Determine status based on recent activity
+                updated_at = session.get('updatedAt', 0)
+                now = time.time() * 1000  # Convert to milliseconds
+                inactive_threshold = 5 * 60 * 1000  # 5 minutes
+                
+                if updated_at and (now - updated_at) < inactive_threshold:
+                    status = 'active'
+                    status_color = 'green'
+                elif updated_at and (now - updated_at) < 30 * 60 * 1000:  # 30 minutes
+                    status = 'idle'
+                    status_color = 'yellow'
+                else:
+                    status = 'stale'
+                    status_color = 'red'
+                
+                # Calculate runtime
+                created_at = session.get('createdAt', updated_at or now)
+                runtime_ms = now - created_at if created_at else 0
+                
+                if runtime_ms < 60000:
+                    runtime = f"{int(runtime_ms/1000)}s"
+                elif runtime_ms < 3600000:
+                    runtime = f"{int(runtime_ms/60000)}m"
+                else:
+                    runtime = f"{int(runtime_ms/3600000)}h"
+                
+                # Try to determine current task from recent messages
+                task = _get_subagent_current_task(key)
+                
+                subagents.append({
+                    'key': key,
+                    'uuid': uuid,
+                    'displayName': display_name,
+                    'status': status,
+                    'statusColor': status_color,
+                    'runtime': runtime,
+                    'runtimeMs': runtime_ms,
+                    'task': task,
+                    'updatedAt': updated_at,
+                    'totalTokens': session.get('totalTokens', 0),
+                    'model': session.get('model', 'unknown'),
+                    'channel': session.get('channel', 'unknown'),
+                })
+    
+    # Sort by most recently active first
+    subagents.sort(key=lambda x: x['updatedAt'] or 0, reverse=True)
+    
+    # Count by status
+    status_counts = {
+        'active': len([s for s in subagents if s['status'] == 'active']),
+        'idle': len([s for s in subagents if s['status'] == 'idle']),
+        'stale': len([s for s in subagents if s['status'] == 'stale']),
+        'total': len(subagents)
+    }
+    
+    return jsonify({
+        'subagents': subagents,
+        'counts': status_counts,
+        'totalActive': status_counts['active'],
+    })
+
+
+def _get_subagent_current_task(session_key):
+    """Try to determine what a sub-agent is currently working on."""
+    uuid = session_key.split(':')[-1]
+    
+    # Try to read recent transcript messages to understand the task
+    sessions_dir = SESSIONS_DIR or os.path.expanduser('~/.moltbot/agents/main/sessions')
+    transcript_file = os.path.join(sessions_dir, f"{session_key.replace(':', '_').replace('agent_main_', '')}.jsonl")
+    
+    # Look for the session file by matching UUID
+    for fname in os.listdir(sessions_dir) if os.path.isdir(sessions_dir) else []:
+        if uuid in fname and fname.endswith('.jsonl'):
+            transcript_file = os.path.join(sessions_dir, fname)
+            break
+    
+    if os.path.exists(transcript_file):
+        try:
+            with open(transcript_file, 'r') as f:
+                # Read last few lines to get recent activity
+                lines = f.readlines()
+                recent_lines = lines[-10:] if len(lines) > 10 else lines
+                
+                for line in reversed(recent_lines):
+                    try:
+                        obj = json.loads(line.strip())
+                        if obj.get('type') == 'message':
+                            message = obj.get('message', {})
+                            if message.get('role') == 'user':
+                                content = message.get('content', [])
+                                if isinstance(content, list) and len(content) > 0:
+                                    text = content[0].get('text', '')
+                                    if text:
+                                        # Extract task from user message
+                                        text = text[:200]  # First 200 chars
+                                        # Look for common patterns
+                                        if 'cron:' in text:
+                                            return text.split('cron:')[1].split(']')[0].strip() + ' (Cron Job)'
+                                        elif 'search' in text.lower():
+                                            return 'Web Search Task'
+                                        elif 'message' in text.lower():
+                                            return 'Message Handler'
+                                        elif 'browser' in text.lower():
+                                            return 'Browser Automation'
+                                        elif 'analysis' in text.lower():
+                                            return 'Data Analysis'
+                                        else:
+                                            # Return first meaningful part
+                                            words = text.split()[:8]
+                                            return ' '.join(words) + ('...' if len(text) > 50 else '')
+                    except (json.JSONDecodeError, KeyError):
+                        continue
+        except Exception:
+            pass
+    
+    # Fallback to session key hints
+    task_hints = {
+        'telegram': 'Telegram Message Handler',
+        'whatsapp': 'WhatsApp Automation', 
+        'browser': 'Web Browser Automation',
+        'cron': 'Scheduled Task Runner',
+        'search': 'Web Search Agent',
+        'analysis': 'Data Analysis Worker',
+        'subagent': 'Sub-Agent Worker',
+    }
+    
+    # Look for hints in the session key
+    key_lower = session_key.lower()
+    for hint, task in task_hints.items():
+        if hint in key_lower:
+            return task
+            
+    return f"Worker ({uuid[:8]})"
 
 
 @app.route('/api/heatmap')
