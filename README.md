@@ -50,7 +50,7 @@ Opens at **http://localhost:8900** — auto-detects your OpenClaw workspace.
 | Tab | What it shows |
 |-----|--------------|
 | **Overview** | Model, sessions, crons, tokens, memory, **❤️ health checks** (auto-refresh via SSE), **🔥 activity heatmap** (GitHub-style), recent logs |
-| **📊 Usage** | **Token/cost tracking** — bar chart of tokens per day (14 days), today/week/month totals, estimated cost breakdown |
+| **📊 Usage** | **Token/cost tracking** — bar chart of tokens per day (14 days), today/week/month totals, cost breakdown. **With OTLP**: real token counts, actual cost, avg run duration, messages processed, model breakdown |
 | **Sessions** | All active agent sessions with model, channel, token usage, last activity |
 | **Crons** | Scheduled jobs with status, schedule, last run, next run, duration |
 | **Logs** | Parsed JSON logs with color-coded levels, configurable line count, **real-time SSE streaming** |
@@ -69,11 +69,12 @@ The Flow tab is the star — a live animated architecture diagram that lights up
 - 🔴 **Red flash** — errors
 - 🔵 **Cyan pulses** — infrastructure layer activity (network, storage, runtime)
 
-### New in v0.2: Observability That Actually Differentiates
+### New in v0.2: OTLP Receiver + Full Observability
 
+- **📡 OTLP Receiver** — Dashboard becomes a lightweight OTel collector. Point OpenClaw at it, get real metrics. No Grafana/Prometheus needed.
 - **🔥 Activity Heatmap** — GitHub-style 7×24 grid showing when your agent is busiest. Pure CSS, no libraries.
-- **❤️ Health Checks** — Gateway, disk, memory, uptime at a glance. Auto-refreshes every 30s via SSE.
-- **📊 Token/Cost Tracking** — See where your tokens go. Daily bar chart, weekly/monthly totals, cost estimates.
+- **❤️ Health Checks** — Gateway, disk, memory, uptime, OTLP status at a glance. Auto-refreshes every 30s via SSE.
+- **📊 Real Token/Cost Tracking** — With OTLP: real token counts, actual cost, model breakdown, avg run duration.
 - **📜 Transcript Viewer** — Read your agent's conversations in a beautiful chat-bubble UI. Color-coded roles, expand/collapse for long messages.
 
 ---
@@ -88,9 +89,58 @@ The Flow tab is the star — a live animated architecture diagram that lights up
 | **Memory-first** | ✅ Browse SOUL.md, MEMORY.md, daily notes | ❌ | ❌ |
 | **Single file** | ✅ One Python file, one dependency | ❌ Multi-service | ❌ Cloud service |
 | **Transcripts** | ✅ Chat-bubble viewer built-in | ✅ (needs SDK) | ✅ (needs SDK) |
-| **Cost tracking** | ✅ Zero instrumentation | ✅ (needs SDK) | ✅ (needs SDK) |
+| **Cost tracking** | ✅ Zero config (OTLP or log parsing) | ✅ (needs SDK) | ✅ (needs SDK) |
+| **Built-in OTel collector** | ✅ OTLP/HTTP receiver | ❌ | ❌ |
 
 **TL;DR:** Langfuse and AgentOps are great for teams building LLM products. OpenClaw Dashboard is for the person running a personal AI agent on their own machine — zero instrumentation, zero config, memory-first. It's the **Grafana for your personal AI agent**.
+
+---
+
+## 📡 Real-time Metrics (OpenTelemetry)
+
+The dashboard can act as a **lightweight OpenTelemetry collector** — no need for Grafana, Prometheus, or a separate OTel Collector. Just point OpenClaw at the dashboard.
+
+### Setup
+
+**1. Install OTLP support:**
+
+```bash
+pip install openclaw-dashboard[otel]
+```
+
+**2. Configure OpenClaw** — add one line to your config:
+
+```yaml
+diagnostics:
+  otel:
+    endpoint: http://localhost:8900
+```
+
+That's it! The dashboard now receives real-time metrics directly from OpenClaw.
+
+### What you get
+
+| Metric | Source | What it shows |
+|--------|--------|---------------|
+| **Token counts** per day | `openclaw.tokens` | Real input/output/total token usage (bar chart) |
+| **Cost** per day | `openclaw.cost.usd` | Actual cost from your provider |
+| **Avg run duration** | `openclaw.run.duration_ms` | How long model completions take |
+| **Messages processed** | `openclaw.message.processed` | Message throughput |
+| **Model breakdown** | attributes | Which models are being used and how much |
+| **OTLP Connected** indicator | health check | Green when data is flowing |
+
+### OTLP Endpoints
+
+- `POST /v1/metrics` — receives OTLP/HTTP protobuf metric data
+- `POST /v1/traces` — receives OTLP/HTTP protobuf trace data
+
+### Without OTLP
+
+Everything still works! The dashboard falls back to parsing session JSONL files for token estimates. OTLP just gives you **real** numbers instead of estimates.
+
+### Persistence
+
+Metrics are stored in-memory (capped at ~10K entries per category, 14-day retention) and auto-persisted to `{workspace}/.openclaw-dashboard-metrics.json` every 60 seconds. Override the path with `--metrics-file` or `OPENCLAW_METRICS_FILE`.
 
 ---
 
@@ -104,6 +154,7 @@ openclaw-dashboard --host 127.0.0.1     # Bind to localhost only
 openclaw-dashboard --workspace ~/mybot  # Custom workspace path
 openclaw-dashboard --log-dir /var/log   # Custom log directory
 openclaw-dashboard --sessions-dir ~/data # Custom sessions directory
+openclaw-dashboard --metrics-file ~/m.json # Custom metrics persistence path
 openclaw-dashboard --name "Alice"       # Your name in Flow visualization
 ```
 
@@ -115,6 +166,7 @@ openclaw-dashboard --name "Alice"       # Your name in Flow visualization
 | `OPENCLAW_WORKSPACE` | Alternative to OPENCLAW_HOME | Auto-detected |
 | `OPENCLAW_SESSIONS_DIR` | Sessions directory (.jsonl transcripts) | Auto-detected |
 | `OPENCLAW_LOG_DIR` | Log directory | `/tmp/moltbot` |
+| `OPENCLAW_METRICS_FILE` | Metrics persistence file path | `{workspace}/.openclaw-dashboard-metrics.json` |
 | `OPENCLAW_USER` | Your name in Flow tab | `You` |
 
 ### Auto-Detection
@@ -182,7 +234,8 @@ curl -sSL https://raw.githubusercontent.com/vivekchand/openclaw-dashboard/main/i
 ## 🔧 Requirements
 
 - **Python 3.8+**
-- **Flask** (only dependency)
+- **Flask** (only required dependency)
+- **opentelemetry-proto + protobuf** (optional, for OTLP receiver — `pip install openclaw-dashboard[otel]`)
 - **OpenClaw/Moltbot** running on the same machine (reads its logs and state files)
 - Linux/macOS (uses `tail`, `df`, `free`, `/proc/loadavg`)
 

@@ -5,7 +5,7 @@ with open("README.md", "r", encoding="utf-8") as f:
 
 setup(
     name="openclaw-dashboard",
-    version="0.1.0",
+    version="0.2.0",
     description="Real-time observability dashboard for OpenClaw AI agents",
     long_description=long_description,
     long_description_content_type="text/markdown",
@@ -17,6 +17,9 @@ setup(
     install_requires=[
         "flask>=2.0",
     ],
+    extras_require={
+        "otel": ["opentelemetry-proto>=1.20.0", "protobuf>=4.21.0"],
+    },
     entry_points={
         "console_scripts": [
             "openclaw-dashboard=dashboard:main",

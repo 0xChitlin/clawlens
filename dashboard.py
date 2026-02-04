@@ -23,10 +23,21 @@ import socket
 import argparse
 import subprocess
 import time
+import threading
 from datetime import datetime, timezone, timedelta
 from flask import Flask, render_template_string, request, jsonify, Response
 
-__version__ = "0.1.0"
+# Optional: OpenTelemetry protobuf support for OTLP receiver
+_HAS_OTEL_PROTO = False
+try:
+    from opentelemetry.proto.collector.metrics.v1 import metrics_service_pb2
+    from opentelemetry.proto.collector.traces.v1 import trace_service_pb2
+    _HAS_OTEL_PROTO = True
+except ImportError:
+    metrics_service_pb2 = None
+    trace_service_pb2 = None
+
+__version__ = "0.2.0"
 
 app = Flask(__name__)
 
@@ -37,6 +48,361 @@ LOG_DIR = None
 SESSIONS_DIR = None
 USER_NAME = None
 CET = timezone(timedelta(hours=1))
+
+# ── OTLP Metrics Store ─────────────────────────────────────────────────
+METRICS_FILE = None  # Set via CLI/env, defaults to {WORKSPACE}/.openclaw-dashboard-metrics.json
+_metrics_lock = threading.Lock()
+_otel_last_received = 0  # timestamp of last OTLP data received
+
+metrics_store = {
+    "tokens": [],       # [{timestamp, input, output, total, model, channel, provider}]
+    "cost": [],         # [{timestamp, usd, model, channel, provider}]
+    "runs": [],         # [{timestamp, duration_ms, model, channel}]
+    "messages": [],     # [{timestamp, channel, outcome, duration_ms}]
+    "webhooks": [],     # [{timestamp, channel, type}]
+}
+MAX_STORE_ENTRIES = 10_000
+STORE_RETENTION_DAYS = 14
+
+
+def _metrics_file_path():
+    """Get the path to the metrics persistence file."""
+    if METRICS_FILE:
+        return METRICS_FILE
+    if WORKSPACE:
+        return os.path.join(WORKSPACE, '.openclaw-dashboard-metrics.json')
+    return os.path.expanduser('~/.openclaw-dashboard-metrics.json')
+
+
+def _load_metrics_from_disk():
+    """Load persisted metrics on startup."""
+    global metrics_store, _otel_last_received
+    path = _metrics_file_path()
+    if not os.path.exists(path):
+        return
+    try:
+        with open(path, 'r') as f:
+            data = json.load(f)
+        if isinstance(data, dict):
+            for key in metrics_store:
+                if key in data and isinstance(data[key], list):
+                    metrics_store[key] = data[key][-MAX_STORE_ENTRIES:]
+            _otel_last_received = data.get('_last_received', 0)
+        _expire_old_entries()
+    except Exception:
+        pass
+
+
+def _save_metrics_to_disk():
+    """Persist metrics store to JSON file."""
+    path = _metrics_file_path()
+    try:
+        d = os.path.dirname(path)
+        if d:
+            os.makedirs(d, exist_ok=True)
+        data = {}
+        with _metrics_lock:
+            for k in metrics_store:
+                data[k] = list(metrics_store[k])
+        data['_last_received'] = _otel_last_received
+        data['_saved_at'] = time.time()
+        tmp = path + '.tmp'
+        with open(tmp, 'w') as f:
+            json.dump(data, f)
+        os.replace(tmp, path)
+    except Exception:
+        pass
+
+
+def _expire_old_entries():
+    """Remove entries older than STORE_RETENTION_DAYS."""
+    cutoff = time.time() - (STORE_RETENTION_DAYS * 86400)
+    with _metrics_lock:
+        for key in metrics_store:
+            metrics_store[key] = [
+                e for e in metrics_store[key]
+                if e.get('timestamp', 0) > cutoff
+            ][-MAX_STORE_ENTRIES:]
+
+
+def _add_metric(category, entry):
+    """Add an entry to the metrics store (thread-safe)."""
+    global _otel_last_received
+    with _metrics_lock:
+        metrics_store[category].append(entry)
+        if len(metrics_store[category]) > MAX_STORE_ENTRIES:
+            metrics_store[category] = metrics_store[category][-MAX_STORE_ENTRIES:]
+        _otel_last_received = time.time()
+
+
+def _metrics_flush_loop():
+    """Background thread: save metrics to disk every 60 seconds."""
+    while True:
+        time.sleep(60)
+        try:
+            _expire_old_entries()
+            _save_metrics_to_disk()
+        except Exception:
+            pass
+
+
+def _start_metrics_flush_thread():
+    """Start the background metrics flush thread."""
+    t = threading.Thread(target=_metrics_flush_loop, daemon=True)
+    t.start()
+
+
+def _has_otel_data():
+    """Check if we have any OTLP metrics data."""
+    return any(len(metrics_store[k]) > 0 for k in metrics_store)
+
+
+# ── OTLP Protobuf Helpers ──────────────────────────────────────────────
+
+def _otel_attr_value(val):
+    """Convert an OTel AnyValue to a Python value."""
+    if val.HasField('string_value'):
+        return val.string_value
+    if val.HasField('int_value'):
+        return val.int_value
+    if val.HasField('double_value'):
+        return val.double_value
+    if val.HasField('bool_value'):
+        return val.bool_value
+    return str(val)
+
+
+def _get_data_points(metric):
+    """Extract data points from a metric regardless of type."""
+    if metric.HasField('sum'):
+        return metric.sum.data_points
+    elif metric.HasField('gauge'):
+        return metric.gauge.data_points
+    elif metric.HasField('histogram'):
+        return metric.histogram.data_points
+    elif metric.HasField('summary'):
+        return metric.summary.data_points
+    return []
+
+
+def _get_dp_value(dp):
+    """Extract the numeric value from a data point."""
+    if hasattr(dp, 'as_double') and dp.as_double:
+        return dp.as_double
+    if hasattr(dp, 'as_int') and dp.as_int:
+        return dp.as_int
+    if hasattr(dp, 'sum') and dp.sum:
+        return dp.sum
+    if hasattr(dp, 'count') and dp.count:
+        return dp.count
+    return 0
+
+
+def _get_dp_attrs(dp):
+    """Extract attributes from a data point."""
+    attrs = {}
+    for attr in dp.attributes:
+        attrs[attr.key] = _otel_attr_value(attr.value)
+    return attrs
+
+
+def _process_otlp_metrics(pb_data):
+    """Decode OTLP metrics protobuf and store relevant data."""
+    req = metrics_service_pb2.ExportMetricsServiceRequest()
+    req.ParseFromString(pb_data)
+
+    for resource_metrics in req.resource_metrics:
+        resource_attrs = {}
+        if resource_metrics.resource:
+            for attr in resource_metrics.resource.attributes:
+                resource_attrs[attr.key] = _otel_attr_value(attr.value)
+
+        for scope_metrics in resource_metrics.scope_metrics:
+            for metric in scope_metrics.metrics:
+                name = metric.name
+                ts = time.time()
+
+                if name == 'openclaw.tokens':
+                    for dp in _get_data_points(metric):
+                        attrs = _get_dp_attrs(dp)
+                        _add_metric('tokens', {
+                            'timestamp': ts,
+                            'input': attrs.get('input_tokens', 0),
+                            'output': attrs.get('output_tokens', 0),
+                            'total': _get_dp_value(dp),
+                            'model': attrs.get('model', resource_attrs.get('model', '')),
+                            'channel': attrs.get('channel', resource_attrs.get('channel', '')),
+                            'provider': attrs.get('provider', resource_attrs.get('provider', '')),
+                        })
+                elif name == 'openclaw.cost.usd':
+                    for dp in _get_data_points(metric):
+                        attrs = _get_dp_attrs(dp)
+                        _add_metric('cost', {
+                            'timestamp': ts,
+                            'usd': _get_dp_value(dp),
+                            'model': attrs.get('model', resource_attrs.get('model', '')),
+                            'channel': attrs.get('channel', resource_attrs.get('channel', '')),
+                            'provider': attrs.get('provider', resource_attrs.get('provider', '')),
+                        })
+                elif name == 'openclaw.run.duration_ms':
+                    for dp in _get_data_points(metric):
+                        attrs = _get_dp_attrs(dp)
+                        _add_metric('runs', {
+                            'timestamp': ts,
+                            'duration_ms': _get_dp_value(dp),
+                            'model': attrs.get('model', resource_attrs.get('model', '')),
+                            'channel': attrs.get('channel', resource_attrs.get('channel', '')),
+                        })
+                elif name == 'openclaw.context.tokens':
+                    for dp in _get_data_points(metric):
+                        attrs = _get_dp_attrs(dp)
+                        _add_metric('tokens', {
+                            'timestamp': ts,
+                            'input': _get_dp_value(dp),
+                            'output': 0,
+                            'total': _get_dp_value(dp),
+                            'model': attrs.get('model', resource_attrs.get('model', '')),
+                            'channel': attrs.get('channel', resource_attrs.get('channel', '')),
+                            'provider': attrs.get('provider', resource_attrs.get('provider', '')),
+                        })
+                elif name in ('openclaw.message.processed', 'openclaw.message.queued', 'openclaw.message.duration_ms'):
+                    for dp in _get_data_points(metric):
+                        attrs = _get_dp_attrs(dp)
+                        outcome = 'processed' if 'processed' in name else ('queued' if 'queued' in name else 'duration')
+                        _add_metric('messages', {
+                            'timestamp': ts,
+                            'channel': attrs.get('channel', resource_attrs.get('channel', '')),
+                            'outcome': outcome,
+                            'duration_ms': _get_dp_value(dp) if 'duration' in name else 0,
+                        })
+                elif name in ('openclaw.webhook.received', 'openclaw.webhook.error', 'openclaw.webhook.duration_ms'):
+                    for dp in _get_data_points(metric):
+                        attrs = _get_dp_attrs(dp)
+                        wtype = 'received' if 'received' in name else ('error' if 'error' in name else 'duration')
+                        _add_metric('webhooks', {
+                            'timestamp': ts,
+                            'channel': attrs.get('channel', resource_attrs.get('channel', '')),
+                            'type': wtype,
+                        })
+
+
+def _process_otlp_traces(pb_data):
+    """Decode OTLP traces protobuf and extract relevant span data."""
+    req = trace_service_pb2.ExportTraceServiceRequest()
+    req.ParseFromString(pb_data)
+
+    for resource_spans in req.resource_spans:
+        resource_attrs = {}
+        if resource_spans.resource:
+            for attr in resource_spans.resource.attributes:
+                resource_attrs[attr.key] = _otel_attr_value(attr.value)
+
+        for scope_spans in resource_spans.scope_spans:
+            for span in scope_spans.spans:
+                attrs = {}
+                for attr in span.attributes:
+                    attrs[attr.key] = _otel_attr_value(attr.value)
+
+                ts = time.time()
+                duration_ns = span.end_time_unix_nano - span.start_time_unix_nano
+                duration_ms = duration_ns / 1_000_000
+
+                span_name = span.name.lower()
+                if 'run' in span_name or 'completion' in span_name:
+                    _add_metric('runs', {
+                        'timestamp': ts,
+                        'duration_ms': duration_ms,
+                        'model': attrs.get('model', resource_attrs.get('model', '')),
+                        'channel': attrs.get('channel', resource_attrs.get('channel', '')),
+                    })
+                elif 'message' in span_name:
+                    _add_metric('messages', {
+                        'timestamp': ts,
+                        'channel': attrs.get('channel', resource_attrs.get('channel', '')),
+                        'outcome': 'processed',
+                        'duration_ms': duration_ms,
+                    })
+
+
+def _get_otel_usage_data():
+    """Aggregate OTLP metrics into usage data for the Usage tab."""
+    today = datetime.now()
+    today_start = today.replace(hour=0, minute=0, second=0, microsecond=0).timestamp()
+    week_start = (today - timedelta(days=today.weekday())).replace(hour=0, minute=0, second=0, microsecond=0).timestamp()
+    month_start = today.replace(day=1, hour=0, minute=0, second=0, microsecond=0).timestamp()
+
+    daily_tokens = {}
+    daily_cost = {}
+    model_usage = {}
+
+    with _metrics_lock:
+        for entry in metrics_store['tokens']:
+            ts = entry.get('timestamp', 0)
+            day = datetime.fromtimestamp(ts).strftime('%Y-%m-%d')
+            total = entry.get('total', 0)
+            daily_tokens[day] = daily_tokens.get(day, 0) + total
+            model = entry.get('model', 'unknown') or 'unknown'
+            model_usage[model] = model_usage.get(model, 0) + total
+
+        for entry in metrics_store['cost']:
+            ts = entry.get('timestamp', 0)
+            day = datetime.fromtimestamp(ts).strftime('%Y-%m-%d')
+            daily_cost[day] = daily_cost.get(day, 0) + entry.get('usd', 0)
+
+    days = []
+    for i in range(13, -1, -1):
+        d = today - timedelta(days=i)
+        ds = d.strftime('%Y-%m-%d')
+        days.append({
+            'date': ds,
+            'tokens': daily_tokens.get(ds, 0),
+            'cost': daily_cost.get(ds, 0),
+        })
+
+    today_str = today.strftime('%Y-%m-%d')
+    today_tok = daily_tokens.get(today_str, 0)
+    week_tok = sum(v for k, v in daily_tokens.items()
+                   if _safe_date_ts(k) >= week_start)
+    month_tok = sum(v for k, v in daily_tokens.items()
+                    if _safe_date_ts(k) >= month_start)
+    today_cost_val = daily_cost.get(today_str, 0)
+    week_cost_val = sum(v for k, v in daily_cost.items()
+                        if _safe_date_ts(k) >= week_start)
+    month_cost_val = sum(v for k, v in daily_cost.items()
+                         if _safe_date_ts(k) >= month_start)
+
+    run_durations = []
+    with _metrics_lock:
+        for entry in metrics_store['runs']:
+            run_durations.append(entry.get('duration_ms', 0))
+    avg_run_ms = sum(run_durations) / len(run_durations) if run_durations else 0
+
+    msg_count = len(metrics_store['messages'])
+
+    return {
+        'source': 'otlp',
+        'days': days,
+        'today': today_tok,
+        'week': week_tok,
+        'month': month_tok,
+        'todayCost': round(today_cost_val, 4),
+        'weekCost': round(week_cost_val, 4),
+        'monthCost': round(month_cost_val, 4),
+        'avgRunMs': round(avg_run_ms, 1),
+        'messageCount': msg_count,
+        'modelBreakdown': [
+            {'model': k, 'tokens': v}
+            for k, v in sorted(model_usage.items(), key=lambda x: -x[1])
+        ],
+    }
+
+
+def _safe_date_ts(date_str):
+    """Parse a YYYY-MM-DD date string to a timestamp, returning 0 on failure."""
+    try:
+        return datetime.strptime(date_str, '%Y-%m-%d').timestamp()
+    except Exception:
+        return 0
 
 
 def detect_config(args=None):
@@ -421,6 +787,7 @@ DASHBOARD_HTML = r"""
     <div class="health-item" id="health-disk"><div class="health-dot" id="health-dot-disk"></div><div class="health-info"><div class="health-name">Disk Space</div><div class="health-detail" id="health-detail-disk">Checking...</div></div></div>
     <div class="health-item" id="health-memory"><div class="health-dot" id="health-dot-memory"></div><div class="health-info"><div class="health-name">Memory</div><div class="health-detail" id="health-detail-memory">Checking...</div></div></div>
     <div class="health-item" id="health-uptime"><div class="health-dot" id="health-dot-uptime"></div><div class="health-info"><div class="health-name">Uptime</div><div class="health-detail" id="health-detail-uptime">Checking...</div></div></div>
+    <div class="health-item" id="health-otel"><div class="health-dot" id="health-dot-otel"></div><div class="health-info"><div class="health-name">📡 OTLP Metrics</div><div class="health-detail" id="health-detail-otel">Checking...</div></div></div>
   </div>
 
   <div class="section-title">🔥 Activity Heatmap <span style="font-size:12px;color:#666;font-weight:400;">(7 days)</span></div>
@@ -461,6 +828,23 @@ DASHBOARD_HTML = r"""
   </div>
   <div class="section-title">💰 Cost Breakdown</div>
   <div class="card"><table class="usage-table" id="usage-cost-table"><tbody><tr><td colspan="3" style="color:#666;">Loading...</td></tr></tbody></table></div>
+  <div id="otel-extra-sections" style="display:none;">
+    <div class="grid" style="margin-top:16px;">
+      <div class="card">
+        <div class="card-title"><span class="icon">⏱️</span> Avg Run Duration</div>
+        <div class="card-value" id="usage-avg-run">—</div>
+        <div class="card-sub">from OTLP openclaw.run.duration_ms</div>
+      </div>
+      <div class="card">
+        <div class="card-title"><span class="icon">💬</span> Messages Processed</div>
+        <div class="card-value" id="usage-msg-count">—</div>
+        <div class="card-sub">from OTLP openclaw.message.processed</div>
+      </div>
+    </div>
+    <div class="section-title">🤖 Model Breakdown</div>
+    <div class="card"><table class="usage-table" id="usage-model-table"><tbody><tr><td colspan="2" style="color:#666;">No model data</td></tr></tbody></table></div>
+    <div style="margin-top:12px;padding:8px 12px;background:#1a3a2a;border:1px solid #2a5a3a;border-radius:8px;font-size:12px;color:#60ff80;">📡 Data source: OpenTelemetry OTLP — real-time metrics from OpenClaw</div>
+  </div>
 </div>
 
 <!-- SESSIONS -->
@@ -959,12 +1343,33 @@ async function loadUsage() {
     });
     document.getElementById('usage-chart').innerHTML = chartHtml;
     // Cost table
-    var tableHtml = '<thead><tr><th>Period</th><th>Tokens</th><th>Est. Cost</th></tr></thead><tbody>';
+    var costLabel = data.source === 'otlp' ? 'Cost' : 'Est. Cost';
+    var tableHtml = '<thead><tr><th>Period</th><th>Tokens</th><th>' + costLabel + '</th></tr></thead><tbody>';
     tableHtml += '<tr><td>Today</td><td>' + fmtTokens(data.today) + '</td><td>' + fmtCost(data.todayCost) + '</td></tr>';
     tableHtml += '<tr><td>This Week</td><td>' + fmtTokens(data.week) + '</td><td>' + fmtCost(data.weekCost) + '</td></tr>';
     tableHtml += '<tr><td>This Month</td><td>' + fmtTokens(data.month) + '</td><td>' + fmtCost(data.monthCost) + '</td></tr>';
     tableHtml += '</tbody>';
     document.getElementById('usage-cost-table').innerHTML = tableHtml;
+    // OTLP-specific sections
+    var otelExtra = document.getElementById('otel-extra-sections');
+    if (data.source === 'otlp') {
+      otelExtra.style.display = '';
+      var runEl = document.getElementById('usage-avg-run');
+      if (runEl) runEl.textContent = data.avgRunMs > 0 ? (data.avgRunMs > 1000 ? (data.avgRunMs/1000).toFixed(1) + 's' : data.avgRunMs.toFixed(0) + 'ms') : '—';
+      var msgEl = document.getElementById('usage-msg-count');
+      if (msgEl) msgEl.textContent = data.messageCount || '0';
+      // Model breakdown table
+      if (data.modelBreakdown && data.modelBreakdown.length > 0) {
+        var mHtml = '<thead><tr><th>Model</th><th>Tokens</th></tr></thead><tbody>';
+        data.modelBreakdown.forEach(function(m) {
+          mHtml += '<tr><td><span class="badge model">' + escHtml(m.model) + '</span></td><td>' + fmtTokens(m.tokens) + '</td></tr>';
+        });
+        mHtml += '</tbody>';
+        document.getElementById('usage-model-table').innerHTML = mHtml;
+      }
+    } else {
+      otelExtra.style.display = 'none';
+    }
   } catch(e) {
     document.getElementById('usage-chart').innerHTML = '<span style="color:#555">No usage data available</span>';
   }
@@ -1552,11 +1957,69 @@ def api_view_file():
         return jsonify({'error': str(e)}), 500
 
 
+# ── OTLP Receiver Endpoints ─────────────────────────────────────────────
+
+@app.route('/v1/metrics', methods=['POST'])
+def otlp_metrics():
+    """OTLP/HTTP receiver for metrics (protobuf)."""
+    if not _HAS_OTEL_PROTO:
+        return jsonify({
+            'error': 'opentelemetry-proto not installed',
+            'message': 'Install OTLP support: pip install openclaw-dashboard[otel]  '
+                       'or: pip install opentelemetry-proto protobuf',
+        }), 501
+
+    try:
+        pb_data = request.get_data()
+        _process_otlp_metrics(pb_data)
+        return '{}', 200, {'Content-Type': 'application/json'}
+    except Exception as e:
+        return jsonify({'error': str(e)}), 400
+
+
+@app.route('/v1/traces', methods=['POST'])
+def otlp_traces():
+    """OTLP/HTTP receiver for traces (protobuf)."""
+    if not _HAS_OTEL_PROTO:
+        return jsonify({
+            'error': 'opentelemetry-proto not installed',
+            'message': 'Install OTLP support: pip install openclaw-dashboard[otel]  '
+                       'or: pip install opentelemetry-proto protobuf',
+        }), 501
+
+    try:
+        pb_data = request.get_data()
+        _process_otlp_traces(pb_data)
+        return '{}', 200, {'Content-Type': 'application/json'}
+    except Exception as e:
+        return jsonify({'error': str(e)}), 400
+
+
+@app.route('/api/otel-status')
+def api_otel_status():
+    """Return OTLP receiver status."""
+    counts = {}
+    with _metrics_lock:
+        for k in metrics_store:
+            counts[k] = len(metrics_store[k])
+    return jsonify({
+        'available': _HAS_OTEL_PROTO,
+        'hasData': _has_otel_data(),
+        'lastReceived': _otel_last_received,
+        'counts': counts,
+    })
+
+
 # ── New Feature APIs ────────────────────────────────────────────────────
 
 @app.route('/api/usage')
 def api_usage():
-    """Token/cost tracking — aggregated from session JSONL files."""
+    """Token/cost tracking — OTLP data preferred, falls back to log parsing."""
+    # Prefer OTLP data when available
+    if _has_otel_data():
+        return jsonify(_get_otel_usage_data())
+
+    # Fallback: parse session JSONL files
     sessions_dir = SESSIONS_DIR or os.path.expanduser('~/.clawdbot/agents/main/sessions')
     daily_tokens = {}
     if os.path.isdir(sessions_dir):
@@ -1867,6 +2330,26 @@ def api_health():
     except Exception:
         checks.append({'id': 'uptime', 'status': 'warning', 'color': 'yellow', 'detail': 'Unknown'})
 
+    # 5. OTLP Metrics
+    if _has_otel_data():
+        ago = time.time() - _otel_last_received
+        if ago < 300:  # <5min
+            total = sum(len(metrics_store[k]) for k in metrics_store)
+            checks.append({'id': 'otel', 'status': 'healthy', 'color': 'green',
+                           'detail': f'Connected — {total} data points, last {int(ago)}s ago'})
+        elif ago < 3600:
+            checks.append({'id': 'otel', 'status': 'warning', 'color': 'yellow',
+                           'detail': f'Stale — last data {int(ago/60)}m ago'})
+        else:
+            checks.append({'id': 'otel', 'status': 'warning', 'color': 'yellow',
+                           'detail': f'Stale — last data {int(ago/3600)}h ago'})
+    elif _HAS_OTEL_PROTO:
+        checks.append({'id': 'otel', 'status': 'warning', 'color': 'yellow',
+                       'detail': 'OTLP ready — no data received yet'})
+    else:
+        checks.append({'id': 'otel', 'status': 'warning', 'color': 'yellow',
+                       'detail': 'Not installed — pip install openclaw-dashboard[otel]'})
+
     return jsonify({'checks': checks})
 
 
@@ -1972,7 +2455,7 @@ BANNER = r"""
 
   Tabs: Overview · 📊 Usage · Sessions · Crons · Logs
         Memory · 📜 Transcripts · Flow
-  New:  Token tracking · Activity heatmap · Health checks
+  New:  📡 OTLP receiver · Real-time metrics · Model breakdown
 """
 
 
@@ -1981,26 +2464,41 @@ def main():
         description="OpenClaw Dashboard — Real-time observability for your AI agent",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="Environment variables:\n"
-               "  OPENCLAW_HOME       Agent workspace directory\n"
-               "  OPENCLAW_LOG_DIR    Log directory (default: /tmp/moltbot)\n"
-               "  OPENCLAW_USER       Your name in the Flow visualization\n"
+               "  OPENCLAW_HOME         Agent workspace directory\n"
+               "  OPENCLAW_LOG_DIR      Log directory (default: /tmp/moltbot)\n"
+               "  OPENCLAW_METRICS_FILE Path to metrics persistence JSON file\n"
+               "  OPENCLAW_USER         Your name in the Flow visualization\n"
     )
     parser.add_argument('--port', '-p', type=int, default=8900, help='Port (default: 8900)')
     parser.add_argument('--host', '-H', type=str, default='0.0.0.0', help='Host (default: 0.0.0.0)')
     parser.add_argument('--workspace', '-w', type=str, help='Agent workspace directory')
     parser.add_argument('--log-dir', '-l', type=str, help='Log directory')
     parser.add_argument('--sessions-dir', '-s', type=str, help='Sessions directory (transcript .jsonl files)')
+    parser.add_argument('--metrics-file', '-m', type=str, help='Path to metrics persistence JSON file')
     parser.add_argument('--name', '-n', type=str, help='Your name (shown in Flow tab)')
     parser.add_argument('--version', '-v', action='version', version=f'openclaw-dashboard {__version__}')
 
     args = parser.parse_args()
     detect_config(args)
 
+    # Metrics file config
+    global METRICS_FILE
+    if args.metrics_file:
+        METRICS_FILE = os.path.expanduser(args.metrics_file)
+    elif os.environ.get('OPENCLAW_METRICS_FILE'):
+        METRICS_FILE = os.path.expanduser(os.environ['OPENCLAW_METRICS_FILE'])
+
+    # Load persisted metrics and start flush thread
+    _load_metrics_from_disk()
+    _start_metrics_flush_thread()
+
     # Print banner
     print(BANNER.format(version=__version__))
     print(f"  Workspace:  {WORKSPACE}")
     print(f"  Sessions:   {SESSIONS_DIR}")
     print(f"  Logs:       {LOG_DIR}")
+    print(f"  Metrics:    {_metrics_file_path()}")
+    print(f"  OTLP:       {'✅ Ready (opentelemetry-proto installed)' if _HAS_OTEL_PROTO else '❌ Not available (pip install openclaw-dashboard[otel])'}")
     print(f"  User:       {USER_NAME}")
     print()
 
@@ -2008,6 +2506,8 @@ def main():
     print(f"  → http://localhost:{args.port}")
     if local_ip != '127.0.0.1':
         print(f"  → http://{local_ip}:{args.port}")
+    if _HAS_OTEL_PROTO:
+        print(f"  → OTLP endpoint: http://{local_ip}:{args.port}/v1/metrics")
     print()
 
     app.run(host=args.host, port=args.port, debug=False)
