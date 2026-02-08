@@ -37,7 +37,7 @@ except ImportError:
     metrics_service_pb2 = None
     trace_service_pb2 = None
 
-__version__ = "0.2.4"
+__version__ = "0.2.5"
 
 app = Flask(__name__)
 
@@ -1716,8 +1716,8 @@ async function loadMiniWidgets(overview, usage) {
   loadToolActivity();
   
   // 📊 Token Burn Rate
-  document.getElementById('token-rate').textContent = '—';
   function fmtTokens(n) { return n >= 1000000 ? (n/1000000).toFixed(1) + 'M' : n >= 1000 ? (n/1000).toFixed(0) + 'K' : String(n); }
+  document.getElementById('token-rate').textContent = fmtTokens(usage.month || 0);
   document.getElementById('tokens-today').textContent = fmtTokens(usage.today || 0);
   
   // 🔥 Hot Sessions
