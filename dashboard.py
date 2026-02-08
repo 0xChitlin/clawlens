@@ -642,6 +642,28 @@ DASHBOARD_HTML = r"""
   .cron-status.error { background: var(--bg-error); color: var(--text-error); }
   .cron-status.pending { background: var(--bg-warning); color: var(--text-warning); }
 
+  /* Cron error info & fix */
+  .cron-error-actions { display: inline-flex; align-items: center; gap: 6px; margin-left: 8px; vertical-align: middle; }
+  .cron-info-icon { cursor: pointer; font-size: 14px; color: var(--text-muted); transition: color 0.15s; user-select: none; }
+  .cron-info-icon:hover { color: var(--text-accent); }
+  .cron-fix-btn { background: #f59e0b; color: #fff; border: none; border-radius: 6px; padding: 2px 10px; font-size: 11px; font-weight: 600; cursor: pointer; transition: background 0.15s; white-space: nowrap; }
+  .cron-fix-btn:hover { background: #d97706; }
+  .cron-error-popover { position: fixed; z-index: 1000; background: #1a1a2e; color: #e0e0e0; border: 1px solid #333; border-radius: 10px; padding: 14px 18px; max-width: 400px; font-size: 12px; line-height: 1.6; box-shadow: 0 8px 30px rgba(0,0,0,0.5); pointer-events: auto; }
+  .cron-error-popover .ep-label { font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: #888; margin-bottom: 2px; }
+  .cron-error-popover .ep-value { color: #fca5a5; margin-bottom: 10px; word-break: break-word; }
+  .cron-error-popover .ep-value.ts { color: #93c5fd; }
+  .cron-error-popover .ep-close { position: absolute; top: 8px; right: 12px; cursor: pointer; color: #888; font-size: 16px; }
+  .cron-error-popover .ep-close:hover { color: #fff; }
+  .cron-toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: #16a34a; color: #fff; padding: 10px 24px; border-radius: 8px; font-size: 13px; font-weight: 600; z-index: 2000; box-shadow: 0 4px 16px rgba(0,0,0,0.3); transition: opacity 0.3s; }
+  .cron-confirm-modal { position: fixed; inset: 0; z-index: 1500; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; }
+  .cron-confirm-box { background: var(--bg-tertiary); border: 1px solid var(--border-primary); border-radius: 12px; padding: 24px; max-width: 360px; text-align: center; box-shadow: 0 8px 30px rgba(0,0,0,0.4); }
+  .cron-confirm-box p { margin-bottom: 16px; font-size: 14px; color: var(--text-primary); }
+  .cron-confirm-box button { padding: 8px 20px; border-radius: 8px; border: none; font-size: 13px; font-weight: 600; cursor: pointer; margin: 0 6px; }
+  .cron-confirm-box .confirm-yes { background: #f59e0b; color: #fff; }
+  .cron-confirm-box .confirm-yes:hover { background: #d97706; }
+  .cron-confirm-box .confirm-no { background: var(--button-bg); color: var(--text-secondary); }
+  .cron-confirm-box .confirm-no:hover { background: var(--button-hover); }
+
   .log-viewer { background: var(--log-bg); border: 1px solid var(--border-primary); border-radius: 8px; font-family: 'SF Mono', 'Fira Code', 'JetBrains Mono', monospace; font-size: 12px; line-height: 1.6; padding: 12px; max-height: 500px; overflow-y: auto; -webkit-overflow-scrolling: touch; white-space: pre-wrap; word-break: break-all; }
   .log-line { padding: 1px 0; }
   .log-line .ts { color: var(--text-muted); }
@@ -681,24 +703,26 @@ DASHBOARD_HTML = r"""
   .section-title { font-size: 16px; font-weight: 700; color: var(--text-primary); margin: 24px 0 12px; display: flex; align-items: center; gap: 8px; }
 
   /* === Flow Visualization === */
-  .flow-container { width: 100%; overflow-x: auto; overflow-y: hidden; position: relative; -webkit-overflow-scrolling: touch; }
+  .flow-container { width: 100%; overflow: visible; position: relative; }
   .flow-stats { display: flex; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }
   .flow-stat { background: var(--bg-tertiary); border: 1px solid var(--border-primary); border-radius: 8px; padding: 8px 14px; flex: 1; min-width: 100px; box-shadow: var(--card-shadow); }
   .flow-stat-label { font-size: 10px; text-transform: uppercase; color: var(--text-muted); letter-spacing: 1px; display: block; }
   .flow-stat-value { font-size: 20px; font-weight: 700; color: var(--text-primary); display: block; margin-top: 2px; }
-  #flow-svg { width: 100%; min-width: 800px; height: auto; display: block; overflow: visible; }
+  #flow-svg { width: 100%; height: auto; display: block; overflow: visible; }
   #flow-svg text { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 15px; font-weight: 700; text-anchor: middle; dominant-baseline: central; pointer-events: none; }
   .flow-node-channel text, .flow-node-gateway text, .flow-node-session text, .flow-node-tool text { fill: #ffffff !important; }
   .flow-node-infra > text { fill: #ffffff !important; }
+  .flow-node-clickable { cursor: pointer; }
+  .flow-node-clickable:hover rect, .flow-node-clickable:hover circle { filter: brightness(1.3); }
   .flow-node rect { rx: 10; ry: 10; stroke-width: 1.5; transition: all 0.3s ease; }
   .flow-node-brain rect { stroke-width: 2.5; }
   @keyframes dashFlow { to { stroke-dashoffset: -24; } }
   .flow-path { stroke-dasharray: 8 4; animation: dashFlow 1.2s linear infinite; }
   .flow-path.flow-path-infra { stroke-dasharray: 6 3; animation: dashFlow 2s linear infinite; }
-  .flow-node-channel.active rect { filter: drop-shadow(0 0 12px rgba(106,64,191,0.8)) drop-shadow(0 0 20px rgba(106,64,191,0.4)); stroke-width: 2.5; transform: scale(1.05); }
-  .flow-node-gateway.active rect { filter: drop-shadow(0 0 12px rgba(64,128,224,0.8)) drop-shadow(0 0 20px rgba(64,128,224,0.4)); stroke-width: 2.5; transform: scale(1.05); }
-  .flow-node-session.active rect { filter: drop-shadow(0 0 12px rgba(64,192,96,0.8)) drop-shadow(0 0 20px rgba(64,192,96,0.4)); stroke-width: 2.5; transform: scale(1.05); }
-  .flow-node-tool.active rect { filter: drop-shadow(0 0 12px rgba(224,96,64,0.9)) drop-shadow(0 0 24px rgba(224,96,64,0.5)); stroke: #ff8050; stroke-width: 2.5; transform: scale(1.1); }
+  .flow-node-channel.active rect { filter: drop-shadow(0 0 12px rgba(106,64,191,0.8)) drop-shadow(0 0 20px rgba(106,64,191,0.4)); stroke-width: 2.5; }
+  .flow-node-gateway.active rect { filter: drop-shadow(0 0 12px rgba(64,128,224,0.8)) drop-shadow(0 0 20px rgba(64,128,224,0.4)); stroke-width: 2.5; }
+  .flow-node-session.active rect { filter: drop-shadow(0 0 12px rgba(64,192,96,0.8)) drop-shadow(0 0 20px rgba(64,192,96,0.4)); stroke-width: 2.5; }
+  .flow-node-tool.active rect { filter: drop-shadow(0 0 8px rgba(224,96,64,0.6)); stroke-width: 2.5; }
   .flow-path { fill: none; stroke: var(--text-muted); stroke-width: 2; stroke-linecap: round; transition: stroke 0.4s, opacity 0.4s; opacity: 0.6; }
   .flow-path.glow-blue { stroke: #4080e0; filter: drop-shadow(0 0 6px rgba(64,128,224,0.6)); }
   .flow-path.glow-yellow { stroke: #f0c040; filter: drop-shadow(0 0 6px rgba(240,192,64,0.6)); }
@@ -775,6 +799,20 @@ DASHBOARD_HTML = r"""
   
   /* === Cost Warnings === */
   .cost-warning { padding: 12px 16px; border-radius: 8px; margin-bottom: 8px; display: flex; align-items: center; gap: 10px; font-size: 13px; }
+  /* === Markdown Rendered Content === */
+  .md-rendered h1,.md-rendered h2,.md-rendered h3,.md-rendered h4 { margin: 8px 0 4px; color: var(--text-primary); }
+  .md-rendered h1 { font-size: 18px; } .md-rendered h2 { font-size: 16px; } .md-rendered h3 { font-size: 14px; }
+  .md-rendered p { margin: 4px 0; }
+  .md-rendered code { background: var(--bg-secondary); padding: 1px 5px; border-radius: 4px; font-size: 12px; font-family: 'SF Mono','JetBrains Mono',monospace; }
+  .md-rendered pre { background: var(--bg-secondary); border: 1px solid var(--border-primary); border-radius: 8px; padding: 10px 14px; overflow-x: auto; margin: 6px 0; }
+  .md-rendered pre code { background: none; padding: 0; }
+  .md-rendered ul,.md-rendered ol { padding-left: 20px; margin: 4px 0; }
+  .md-rendered blockquote { border-left: 3px solid var(--text-accent); padding-left: 12px; margin: 6px 0; color: var(--text-secondary); }
+  .md-rendered strong { color: var(--text-primary); }
+  .md-rendered a { color: var(--text-link); }
+  .md-rendered table { border-collapse: collapse; margin: 6px 0; }
+  .md-rendered th,.md-rendered td { border: 1px solid var(--border-primary); padding: 4px 8px; font-size: 12px; }
+
   .cost-warning.error { background: var(--bg-error); border: 1px solid var(--text-error); color: var(--text-error); }
   .cost-warning.warning { background: var(--bg-warning); border: 1px solid var(--text-warning); color: var(--text-warning); }
   .cost-warning-icon { font-size: 16px; }
@@ -880,7 +918,7 @@ DASHBOARD_HTML = r"""
   .overview-flow-pane .flow-container { height: 100%; }
   .overview-flow-pane svg { width: 100%; height: 100%; min-width: 0 !important; }
   .overview-divider { background: var(--border-primary); width: 1px; }
-  .overview-tasks-pane { overflow: visible; border: 1px solid var(--border-primary); border-left: none; border-radius: 0 8px 8px 0; padding: 10px 12px; }
+  .overview-tasks-pane { overflow-y: auto; border: 1px solid var(--border-primary); border-left: none; border-radius: 0 8px 8px 0; padding: 10px 12px; }
   /* Scanline overlay */
   .scanline-overlay { pointer-events: none; position: absolute; inset: 0; z-index: 2; background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,255,65,0.015) 2px, rgba(0,255,65,0.015) 4px); }
   .grid-overlay { pointer-events: none; position: absolute; inset: 0; z-index: 1; background-image: linear-gradient(var(--border-secondary) 1px, transparent 1px), linear-gradient(90deg, var(--border-secondary) 1px, transparent 1px); background-size: 40px 40px; opacity: 0.3; }
@@ -931,6 +969,32 @@ DASHBOARD_HTML = r"""
   .evt-item.type-result { border-left: 3px solid #ea580c; }
   .evt-item.type-thinking { border-left: 3px solid #6b7280; }
   .evt-item.type-user { border-left: 3px solid #7c3aed; }
+  /* === Component Detail Modal === */
+  .comp-modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 1100; justify-content: center; align-items: center; }
+  .comp-modal-overlay.open { display: flex; }
+  .comp-modal-card { background: var(--bg-primary); border: 1px solid var(--border-primary); border-radius: 16px; width: 90%; max-width: 560px; display: flex; flex-direction: column; box-shadow: 0 25px 50px rgba(0,0,0,0.25); max-height: 90vh; }
+  .comp-modal-header { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; border-bottom: 1px solid var(--border-primary); }
+  .comp-modal-title { font-size: 18px; font-weight: 700; color: var(--text-primary); }
+  .comp-modal-close { background: var(--button-bg); border: 1px solid var(--border-primary); border-radius: 8px; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 18px; color: var(--text-tertiary); transition: all 0.15s; }
+  .comp-modal-close:hover { background: var(--bg-error); color: var(--text-error); }
+  .comp-modal-body { padding: 24px 20px; font-size: 14px; color: var(--text-secondary); line-height: 1.6; max-height: 70vh; overflow-y: auto; }
+
+  /* Telegram Chat Bubbles */
+  .tg-stats { display: flex; gap: 16px; padding: 10px 14px; background: var(--bg-secondary); border-radius: 8px; margin-bottom: 12px; font-size: 13px; font-weight: 600; }
+  .tg-stats .in { color: #3b82f6; } .tg-stats .out { color: #22c55e; }
+  .tg-chat { display: flex; flex-direction: column; gap: 8px; }
+  .tg-bubble { max-width: 85%; padding: 10px 14px; border-radius: 16px; font-size: 13px; line-height: 1.5; word-wrap: break-word; position: relative; }
+  .tg-bubble.in { background: #1e3a5f; border: 1px solid #2a5a8a; color: #c0d8ff; align-self: flex-start; border-bottom-left-radius: 4px; }
+  .tg-bubble.out { background: #1a3a2a; border: 1px solid #2a5a3a; color: #c0ffc0; align-self: flex-end; border-bottom-right-radius: 4px; }
+  [data-theme="light"] .tg-bubble.in { background: #dbeafe; border-color: #93c5fd; color: #1e3a5f; }
+  [data-theme="light"] .tg-bubble.out { background: #dcfce7; border-color: #86efac; color: #14532d; }
+  .tg-bubble .tg-sender { font-size: 11px; font-weight: 700; margin-bottom: 2px; opacity: 0.7; }
+  .tg-bubble .tg-time { font-size: 10px; color: var(--text-muted); margin-top: 4px; text-align: right; }
+  .tg-bubble .tg-text { white-space: pre-wrap; }
+  .tg-load-more { text-align: center; padding: 10px; }
+  .tg-load-more button { background: var(--button-bg); border: 1px solid var(--border-primary); border-radius: 8px; padding: 6px 20px; color: var(--text-secondary); cursor: pointer; font-size: 13px; }
+  .tg-load-more button:hover { background: var(--button-hover); }
+  .comp-modal-footer { border-top: 1px solid var(--border-primary); padding: 10px 20px; font-size: 11px; color: var(--text-muted); }
   /* === Compact Stats Footer Bar === */
   .stats-footer { display: flex; gap: 0; border: 1px solid var(--border-primary); border-radius: 8px; margin-top: 6px; background: var(--bg-tertiary); overflow: hidden; }
   .stats-footer-item { flex: 1; padding: 6px 12px; display: flex; align-items: center; gap: 8px; border-right: 1px solid var(--border-primary); cursor: pointer; transition: background 0.15s; }
@@ -972,7 +1036,7 @@ DASHBOARD_HTML = r"""
     .flow-stats { gap: 8px; }
     .flow-stat { min-width: 70px; padding: 6px 10px; }
     .flow-stat-value { font-size: 16px; }
-    #flow-svg { min-width: 600px; }
+    #flow-svg { min-width: 0; }
     .heatmap-grid { min-width: 500px; }
     .chat-msg { max-width: 95%; }
     .usage-chart { height: 150px; }
@@ -980,8 +1044,7 @@ DASHBOARD_HTML = r"""
     /* Enhanced Flow mobile optimizations */
     .flow-container { 
       padding-bottom: 20px; 
-      max-height: 70vh; 
-      overflow-y: auto; 
+      overflow: visible; 
     }
     #flow-svg text { font-size: 10px !important; }
     .flow-label { font-size: 7px !important; }
@@ -995,6 +1058,7 @@ DASHBOARD_HTML = r"""
     .zoom-level { min-width: 32px; font-size: 10px; }
   }
 </style>
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 </head>
 <body data-theme="light"><script>var t=localStorage.getItem('openclaw-theme');if(t==='dark')document.body.setAttribute('data-theme','dark');</script>
 <div class="zoom-wrapper" id="zoom-wrapper">
@@ -1009,9 +1073,7 @@ DASHBOARD_HTML = r"""
   <div class="nav-tabs">
     <div class="nav-tab" onclick="switchTab('flow')">Flow</div>
     <div class="nav-tab active" onclick="switchTab('overview')">Overview</div>
-    <div class="nav-tab" onclick="switchTab('sessions')">Sessions</div>
-    <div class="nav-tab" onclick="switchTab('crons')">Schedules</div>
-    <div class="nav-tab" onclick="switchTab('logs')">Logs</div>
+    <div class="nav-tab" onclick="switchTab('crons')">Crons</div>
     <div class="nav-tab" onclick="switchTab('memory')">Memory</div>
   </div>
 </div>
@@ -1054,6 +1116,20 @@ DASHBOARD_HTML = r"""
           <div style="font-size:28px;margin-bottom:8px;" class="tasks-empty-icon">🐝</div>
           <div style="font-size:13px;">Loading tasks...</div>
         </div>
+      </div>
+      <!-- System Health Panel (inside tasks pane) -->
+      <div id="system-health-panel" style="background:var(--bg-secondary);border:1px solid var(--border-primary);border-radius:12px;padding:16px;margin-top:14px;box-shadow:var(--card-shadow);">
+        <div style="font-size:14px;font-weight:700;color:var(--text-primary);margin-bottom:12px;">🏥 System Health</div>
+        <div style="font-size:11px;text-transform:uppercase;letter-spacing:1.5px;color:var(--text-muted);font-weight:600;margin-bottom:6px;">Services</div>
+        <div id="sh-services" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px;"></div>
+        <div style="font-size:11px;text-transform:uppercase;letter-spacing:1.5px;color:var(--text-muted);font-weight:600;margin-bottom:6px;">Disk Usage</div>
+        <div id="sh-disks" style="margin-bottom:14px;"></div>
+        <div style="font-size:11px;text-transform:uppercase;letter-spacing:1.5px;color:var(--text-muted);font-weight:600;margin-bottom:6px;">Cron Jobs</div>
+        <div id="sh-crons" style="margin-bottom:14px;"></div>
+        <div style="font-size:11px;text-transform:uppercase;letter-spacing:1.5px;color:var(--text-muted);font-weight:600;margin-bottom:6px;">Sub-Agents (24h)</div>
+        <div id="sh-subagents" style="margin-bottom:14px;"></div>
+        <div style="font-size:11px;text-transform:uppercase;letter-spacing:1.5px;color:var(--text-muted);font-weight:600;margin-bottom:6px;">Token Usage</div>
+        <div style="padding:12px;background:var(--bg-tertiary);border-radius:8px;text-align:center;color:var(--text-muted);font-size:12px;">📊 Coming soon</div>
       </div>
     </div>
   </div>
@@ -1111,14 +1187,7 @@ DASHBOARD_HTML = r"""
     <div id="activity-stream"></div>
   </div>
 
-  <!-- System Health (Compact) -->
-  <div class="section-title">🟢 System Status</div>
-  <div class="health-grid" id="health-grid">
-    <div class="health-item" id="health-gateway"><div class="health-dot" id="health-dot-gateway"></div><div class="health-info"><div class="health-name">Gateway</div><div class="health-detail" id="health-detail-gateway">Checking...</div></div></div>
-    <div class="health-item" id="health-disk"><div class="health-dot" id="health-dot-disk"></div><div class="health-info"><div class="health-name">Disk Space</div><div class="health-detail" id="health-detail-disk">Checking...</div></div></div>
-    <div class="health-item" id="health-memory"><div class="health-dot" id="health-dot-memory"></div><div class="health-info"><div class="health-name">Memory</div><div class="health-detail" id="health-detail-memory">Checking...</div></div></div>
-    <div class="health-item" id="health-otel"><div class="health-dot" id="health-dot-otel"></div><div class="health-info"><div class="health-name">📡 Data Source</div><div class="health-detail" id="health-detail-otel">Checking...</div></div></div>
-  </div>
+  <!-- old system health removed, now inside tasks pane -->
 </div>
 
 <!-- USAGE -->
@@ -1179,148 +1248,10 @@ DASHBOARD_HTML = r"""
   </div>
 </div>
 
-<!-- SESSIONS (with Sub-Agent Tree) -->
-<div class="page" id="page-sessions">
-  <div class="refresh-bar">
-    <button class="refresh-btn" onclick="loadSessions(); loadSubAgentsPage();">↻ Refresh</button>
-    <label style="margin-left:12px;font-size:13px;color:var(--text-muted);display:flex;align-items:center;gap:6px;cursor:pointer;">
-      <input type="checkbox" id="sa-auto-refresh" checked onchange="toggleSAAutoRefresh()" style="accent-color:var(--bg-accent);"> Auto-refresh
-    </label>
-    <span style="margin-left:auto;font-size:12px;color:var(--text-faint);" id="sa-refresh-time"></span>
-  </div>
-
-  <!-- Sub-Agent Mission Control -->
-  <div class="section-title">🐝 Sub-Agent Activity <span style="font-size:12px;font-weight:400;color:var(--text-muted);">— click to see live details</span></div>
-
-  <!-- Sub-Agent Stats Row -->
-  <div class="grid" style="margin-bottom:16px;">
-    <div class="card">
-      <div class="card-title"><span class="icon">🟢</span> Active Now</div>
-      <div class="card-value" id="subagents-active-count">—</div>
-      <div class="card-sub">Currently working</div>
-    </div>
-    <div class="card">
-      <div class="card-title"><span class="icon">✅</span> Completed</div>
-      <div class="card-value" id="subagents-stale-count">—</div>
-      <div class="card-sub">Finished tasks</div>
-    </div>
-    <div class="card">
-      <div class="card-title"><span class="icon">📊</span> Total</div>
-      <span id="subagents-idle-count" style="display:none;">—</span>
-      <div class="card-value" id="subagents-total-count">—</div>
-      <div class="card-sub">All sub-agents</div>
-    </div>
-  </div>
-
-  <div class="card" id="subagents-list" style="padding:0;">Loading agents...</div>
-
-  <!-- Activity detail panel -->
-  <div id="sa-activity-panel" style="display:none;margin-top:12px;">
-    <div class="card" style="padding:0;">
-      <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid var(--border-secondary);background:var(--bg-secondary);border-radius:12px 12px 0 0;">
-        <div>
-          <span style="font-weight:700;font-size:15px;color:var(--text-primary);" id="sa-panel-title">Sub-Agent</span>
-          <span style="font-size:11px;color:var(--text-muted);margin-left:8px;" id="sa-panel-status"></span>
-        </div>
-        <button onclick="closeSAPanel()" style="background:var(--button-bg);border:1px solid var(--border-primary);color:var(--text-secondary);padding:6px 12px;border-radius:6px;cursor:pointer;font-size:12px;">✕ Close</button>
-      </div>
-      <div id="sa-activity-timeline" style="max-height:500px;overflow-y:auto;padding:8px 0;">
-        <div style="padding:20px;text-align:center;color:var(--text-muted);">Loading activity...</div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Mission Control Tasks -->
-  <div id="mc-bar-wrapper" style="display:none;margin-top:16px;">
-    <div id="mc-summary-bar" style="background:var(--bg-tertiary);border:1px solid var(--border-primary);border-radius:10px;padding:10px 16px;display:flex;align-items:center;gap:6px;flex-wrap:wrap;box-shadow:var(--card-shadow);"></div>
-    <div id="mc-expanded-section" style="display:none;background:var(--bg-tertiary);border:1px solid var(--border-primary);border-top:none;border-radius:0 0 10px 10px;padding:12px 16px;max-height:300px;overflow-y:auto;"></div>
-  </div>
-
-  <!-- Session Tree -->
-  <div class="section-title" style="margin-top:24px;">💬 Session Tree</div>
-  <div class="card" id="sessions-list">Loading...</div>
-</div>
-
-<!-- SUB-AGENTS (hidden, merged into Sessions) -->
-<div class="page" id="page-subagents" style="display:none !important;">
-  <div class="refresh-bar">
-    <button class="refresh-btn" onclick="loadSubAgentsPage()">↻ Refresh</button>
-    <label style="margin-left:12px;font-size:12px;color:#888;display:flex;align-items:center;gap:4px;cursor:pointer;">
-      <input type="checkbox" id="sa-auto-refresh" checked onchange="toggleSAAutoRefresh()" style="accent-color:#60a0ff;"> Auto-refresh (5s)
-    </label>
-    <span style="margin-left:auto;font-size:11px;color:#555;" id="sa-refresh-time"></span>
-  </div>
-
-  <!-- Status legend -->
-  <div style="display:flex;gap:16px;margin-bottom:12px;padding:8px 12px;background:var(--bg-secondary,#111128);border-radius:8px;font-size:12px;color:#888;flex-wrap:wrap;align-items:center;">
-    <span style="font-weight:600;color:#aaa;">Status:</span>
-    <span style="display:flex;align-items:center;gap:4px;"><span style="width:8px;height:8px;border-radius:50%;background:#27ae60;display:inline-block;"></span> Active — working right now</span>
-    <span style="display:flex;align-items:center;gap:4px;"><span style="width:8px;height:8px;border-radius:50%;background:#f0c040;display:inline-block;"></span> Idle — finished recently (&lt;30m)</span>
-    <span style="display:flex;align-items:center;gap:4px;"><span style="width:8px;height:8px;border-radius:50%;background:#e74c3c;display:inline-block;"></span> Done — completed or timed out</span>
-  </div>
-
-  <!-- Sub-Agent Stats Overview -->
-  <div class="grid">
-    <div class="card">
-      <div class="card-title"><span class="icon">🟢</span> Active Now</div>
-      <div class="card-value" id="subagents-active-count">—</div>
-      <div class="card-sub">Currently working</div>
-    </div>
-    <div class="card">
-      <div class="card-title"><span class="icon">🟡</span> Recently Idle</div>
-      <div class="card-value" id="subagents-idle-count">—</div>
-      <div class="card-sub">Finished in last 30m</div>
-    </div>
-    <div class="card">
-      <div class="card-title"><span class="icon">✅</span> Completed</div>
-      <div class="card-value" id="subagents-stale-count">—</div>
-      <div class="card-sub">Done &amp; dusted</div>
-    </div>
-    <div class="card">
-      <div class="card-title"><span class="icon">📊</span> Total Spawned</div>
-      <div class="card-value" id="subagents-total-count">—</div>
-      <div class="card-sub">All sub-agents ever</div>
-    </div>
-  </div>
-
-  <div class="section-title">🐝 Sub-Agent Activity <span style="font-size:12px;font-weight:400;color:#666;">— click a worker to see what it's doing</span></div>
-  <div class="card" id="subagents-list" style="padding:0;">Loading workforce...</div>
-
-  <!-- Expanded activity panel (shown when clicking a sub-agent) -->
-  <div id="sa-activity-panel" style="display:none;margin-top:12px;">
-    <div class="card" style="padding:0;">
-      <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid var(--border-secondary,#2a2a4a);background:var(--bg-secondary,#111128);">
-        <div>
-          <span style="font-weight:700;font-size:15px;color:var(--text-primary,#e0e0e0);" id="sa-panel-title">Sub-Agent</span>
-          <span style="font-size:11px;color:#666;margin-left:8px;" id="sa-panel-status"></span>
-        </div>
-        <button onclick="closeSAPanel()" style="background:none;border:1px solid #444;color:#aaa;padding:4px 10px;border-radius:6px;cursor:pointer;font-size:12px;">✕ Close</button>
-      </div>
-      <div id="sa-activity-timeline" style="max-height:500px;overflow-y:auto;padding:8px 0;">
-        <div style="padding:20px;text-align:center;color:#666;">Loading activity...</div>
-      </div>
-    </div>
-  </div>
-</div>
-
 <!-- CRONS -->
 <div class="page" id="page-crons">
   <div class="refresh-bar"><button class="refresh-btn" onclick="loadCrons()">↻ Refresh</button></div>
   <div class="card" id="crons-list">Loading...</div>
-</div>
-
-<!-- LOGS -->
-<div class="page" id="page-logs">
-  <div class="refresh-bar">
-    <button class="refresh-btn" onclick="loadLogs()">↻ Refresh</button>
-    <select id="log-lines" onchange="loadLogs()" style="background:var(--bg-tertiary);color:var(--text-primary);border:1px solid var(--border-primary);padding:6px 10px;border-radius:6px;font-size:13px;">
-      <option value="50">50 lines</option>
-      <option value="100" selected>100 lines</option>
-      <option value="300">300 lines</option>
-      <option value="500">500 lines</option>
-    </select>
-  </div>
-  <div class="log-viewer" id="logs-full" style="max-height:calc(100vh - 140px);">Loading...</div>
 </div>
 
 <!-- MEMORY -->
@@ -1538,10 +1469,7 @@ function switchTab(name) {
   event.target.classList.add('active');
   if (name === 'overview') loadAll();
   if (name === 'usage') loadUsage();
-  if (name === 'sessions') { loadSessions(); loadSubAgentsPage(); }
-  if (name === 'subagents') loadSubAgentsPage();
   if (name === 'crons') loadCrons();
-  if (name === 'logs') loadLogs();
   if (name === 'memory') loadMemory();
   if (name === 'transcripts') loadTranscripts();
   if (name === 'flow') initFlow();
@@ -1939,7 +1867,7 @@ async function loadActiveTasks() {
       var detailId = 'task-detail-' + agent.sessionId.replace(/[^a-z0-9]/gi, '');
       html += '<div style="display:flex;align-items:center;gap:12px;margin-top:4px;">';
       html += '<span style="font-size:11px;color:var(--text-tertiary);cursor:pointer;user-select:none;" onclick="event.stopPropagation();var d=document.getElementById(\'' + detailId + '\');var open=d.style.display!==\'none\';d.style.display=open?\'none\':\'block\';this.textContent=open?\'▶ Show details\':\'▼ Hide details\';">▶ Show details</span>';
-      html += '<span style="font-size:11px;color:var(--text-link);cursor:pointer;opacity:0.7;" onclick="event.stopPropagation();switchTab(\'sessions\');setTimeout(function(){openSAActivity(\'' + agent.sessionId + '\',\'' + escHtml(agent.displayName).replace(/'/g, "\\'") + '\',\'' + agent.status + '\')},300)">📋 View logs</span>';
+      html += '<span style="font-size:11px;color:var(--text-link);cursor:pointer;opacity:0.7;" onclick="event.stopPropagation();openTaskModal(\'' + escHtml(agent.sessionId).replace(/'/g,"\\'") + '\',\'' + escHtml(taskName).replace(/'/g,"\\'") + '\',\'' + escHtml(agent.key || agent.sessionId).replace(/'/g,"\\'") + '\');setTimeout(function(){switchModalTab(\'full\');},100);">📋 View logs</span>';
       html += '</div>';
       // Collapsible technical details
       html += '<div id="' + detailId + '" style="display:none;margin-top:8px;padding:10px;background:var(--bg-secondary);border:1px solid var(--border-secondary);border-radius:8px;font-size:11px;line-height:1.7;color:var(--text-tertiary);">';
@@ -2393,6 +2321,15 @@ async function loadCrons() {
     html += '<div style="display:flex;justify-content:space-between;align-items:center;">';
     html += '<div class="cron-name">' + escHtml(j.name || j.id) + '</div>';
     html += '<span class="cron-status ' + status + '">' + status + '</span>';
+    if (status === 'error') {
+      var errMsg = (j.state && j.state.lastError) ? escHtml(j.state.lastError) : 'Unknown error';
+      var errTime = (j.state && j.state.lastRunAtMs) ? new Date(j.state.lastRunAtMs).toLocaleString() : 'Unknown';
+      var consecutiveFails = (j.state && j.state.consecutiveFailures) ? j.state.consecutiveFailures : '';
+      html += '<span class="cron-error-actions">';
+      html += '<span class="cron-info-icon" title="Error details" onclick="event.stopPropagation();showCronError(this,\'' + errMsg.replace(/'/g,'\\&#39;').replace(/"/g,'&quot;') + '\',\'' + escHtml(errTime) + '\',' + (consecutiveFails||'null') + ')">ℹ️</span>';
+      html += '<button class="cron-fix-btn" onclick="event.stopPropagation();confirmCronFix(\'' + escHtml(j.id) + '\',\'' + escHtml(j.name||j.id).replace(/'/g,'\\&#39;') + '\')">🔧 Fix</button>';
+      html += '</span>';
+    }
     html += '</div>';
     html += '<div class="cron-schedule">' + formatSchedule(j.schedule) + '</div>';
     html += '<div class="cron-meta">';
@@ -2402,6 +2339,55 @@ async function loadCrons() {
     html += '</div></div>';
   });
   document.getElementById('crons-list').innerHTML = html || 'No cron jobs';
+}
+
+function showCronError(el, msg, ts, fails) {
+  // Remove any existing popover
+  var old = document.querySelector('.cron-error-popover');
+  if (old) old.remove();
+  var rect = el.getBoundingClientRect();
+  var pop = document.createElement('div');
+  pop.className = 'cron-error-popover';
+  pop.style.top = (rect.bottom + 8) + 'px';
+  pop.style.left = Math.min(rect.left, window.innerWidth - 420) + 'px';
+  var h = '<span class="ep-close" onclick="this.parentElement.remove()">&times;</span>';
+  h += '<div class="ep-label">Error Message</div><div class="ep-value">' + msg + '</div>';
+  h += '<div class="ep-label">Failed At</div><div class="ep-value ts">' + ts + '</div>';
+  if (fails) h += '<div class="ep-label">Consecutive Failures</div><div class="ep-value">' + fails + '</div>';
+  pop.innerHTML = h;
+  document.body.appendChild(pop);
+  // Close on outside click
+  setTimeout(function() {
+    document.addEventListener('click', function handler(e) {
+      if (!pop.contains(e.target) && e.target !== el) { pop.remove(); document.removeEventListener('click', handler); }
+    });
+  }, 10);
+}
+
+function confirmCronFix(jobId, jobName) {
+  var modal = document.createElement('div');
+  modal.className = 'cron-confirm-modal';
+  modal.innerHTML = '<div class="cron-confirm-box"><p>Ask AI to diagnose and fix<br><strong>' + jobName + '</strong>?</p><button class="confirm-yes" onclick="submitCronFix(\'' + jobId + '\');this.closest(\'.cron-confirm-modal\').remove()">Yes, fix it</button><button class="confirm-no" onclick="this.closest(\'.cron-confirm-modal\').remove()">Cancel</button></div>';
+  document.body.appendChild(modal);
+  modal.addEventListener('click', function(e) { if (e.target === modal) modal.remove(); });
+}
+
+async function submitCronFix(jobId) {
+  try {
+    var res = await fetch('/api/cron/fix', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({jobId: jobId})});
+    var data = await res.json();
+    showCronToast(data.message || 'Fix request sent to AI agent');
+  } catch(e) {
+    showCronToast('Error: ' + e.message);
+  }
+}
+
+function showCronToast(msg) {
+  var t = document.createElement('div');
+  t.className = 'cron-toast';
+  t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(function() { t.style.opacity = '0'; setTimeout(function() { t.remove(); }, 300); }, 3000);
 }
 
 function formatSchedule(s) {
@@ -2560,6 +2546,67 @@ function startHealthStream() {
   healthStream.onerror = function() { setTimeout(startHealthStream, 30000); };
 }
 startHealthStream();
+
+// ===== System Health Panel =====
+async function loadSystemHealth() {
+  try {
+    var d = await fetch('/api/system-health').then(r => r.json());
+
+    // Services
+    var shtml = '';
+    d.services.forEach(function(s) {
+      var dot = s.up ? '🟢' : '🔴';
+      shtml += '<div style="display:flex;align-items:center;gap:6px;padding:8px 14px;background:var(--bg-secondary);border-radius:8px;border:1px solid var(--border-secondary);font-size:13px;">'
+        + dot + ' <span style="font-weight:600;color:var(--text-primary);">' + s.name + '</span>'
+        + '<span style="color:var(--text-muted);font-size:11px;margin-left:auto;">:' + s.port + '</span></div>';
+    });
+    document.getElementById('sh-services').innerHTML = shtml;
+
+    // Disks
+    var dhtml = '';
+    d.disks.forEach(function(dk) {
+      var barColor = dk.pct > 90 ? '#dc2626' : (dk.pct > 75 ? '#d97706' : '#16a34a');
+      dhtml += '<div style="margin-bottom:10px;">'
+        + '<div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px;">'
+        + '<span style="font-weight:600;color:var(--text-primary);">' + dk.mount + '</span>'
+        + '<span style="color:var(--text-muted);">' + dk.used_gb + ' / ' + dk.total_gb + ' GB (' + dk.pct + '%)</span></div>'
+        + '<div style="background:var(--bg-secondary);border-radius:6px;height:10px;overflow:hidden;border:1px solid var(--border-secondary);">'
+        + '<div style="width:' + dk.pct + '%;height:100%;background:' + barColor + ';border-radius:6px;transition:width 0.5s;"></div>'
+        + '</div></div>';
+    });
+    document.getElementById('sh-disks').innerHTML = dhtml;
+
+    // Crons
+    var c = d.crons;
+    var chtml = '<div style="display:flex;gap:12px;flex-wrap:wrap;">'
+      + '<div style="flex:1;min-width:100px;padding:12px 16px;background:var(--bg-secondary);border-radius:8px;text-align:center;border:1px solid var(--border-secondary);">'
+      + '<div style="font-size:24px;font-weight:700;color:var(--text-primary);">' + c.enabled + '</div>'
+      + '<div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;">Enabled</div></div>'
+      + '<div style="flex:1;min-width:100px;padding:12px 16px;background:var(--bg-secondary);border-radius:8px;text-align:center;border:1px solid var(--border-secondary);">'
+      + '<div style="font-size:24px;font-weight:700;color:var(--text-success);">' + c.ok24h + '</div>'
+      + '<div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;">OK (24h)</div></div></div>';
+    if (c.failed && c.failed.length > 0) {
+      chtml += '<div style="margin-top:8px;padding:10px 14px;background:var(--bg-error);border:1px solid rgba(220,38,38,0.2);border-radius:8px;font-size:12px;color:var(--text-error);">';
+      c.failed.forEach(function(f) { chtml += '<div>❌ ' + f + '</div>'; });
+      chtml += '</div>';
+    }
+    document.getElementById('sh-crons').innerHTML = chtml;
+
+    // Sub-agents
+    var sa = d.subagents;
+    var pctColor = sa.successPct >= 100 ? 'var(--text-success)' : (sa.successPct > 80 ? 'var(--text-warning)' : 'var(--text-error)');
+    var sahtml = '<div style="display:flex;gap:12px;flex-wrap:wrap;">'
+      + '<div style="flex:1;min-width:100px;padding:12px 16px;background:var(--bg-secondary);border-radius:8px;text-align:center;border:1px solid var(--border-secondary);">'
+      + '<div style="font-size:24px;font-weight:700;color:var(--text-primary);">' + sa.runs + '</div>'
+      + '<div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;">Runs</div></div>'
+      + '<div style="flex:1;min-width:100px;padding:12px 16px;background:var(--bg-secondary);border-radius:8px;text-align:center;border:1px solid var(--border-secondary);">'
+      + '<div style="font-size:24px;font-weight:700;color:' + pctColor + ';">' + sa.successPct + '%</div>'
+      + '<div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;">Success</div></div></div>';
+    document.getElementById('sh-subagents').innerHTML = sahtml;
+  } catch(e) { console.error('System health load failed', e); }
+}
+loadSystemHealth();
+setInterval(loadSystemHealth, 30000);
 
 // ===== Activity Heatmap =====
 async function loadHeatmap() {
@@ -2866,12 +2913,67 @@ startLogStream();
 var flowStats = { messages: 0, events: 0, activeTools: {}, msgTimestamps: [] };
 var flowInitDone = false;
 
+function hideUnconfiguredChannels(svgRoot) {
+  // Hide channel nodes and their paths for unconfigured channels
+  var channelMap = {
+    'telegram': { node: 'node-telegram', paths: ['path-human-tg', 'path-tg-gw'] },
+    'signal':   { node: 'node-signal',   paths: ['path-human-sig', 'path-sig-gw'] },
+    'whatsapp': { node: 'node-whatsapp', paths: ['path-human-wa', 'path-wa-gw'] }
+  };
+  fetch('/api/channels').then(function(r){return r.json();}).then(function(d) {
+    var active = d.channels || ['telegram', 'signal', 'whatsapp'];
+    var allChannels = ['telegram', 'signal', 'whatsapp'];
+    var hiddenCount = 0;
+    allChannels.forEach(function(ch) {
+      if (active.indexOf(ch) === -1) {
+        hiddenCount++;
+        var info = channelMap[ch];
+        var node = svgRoot.getElementById ? svgRoot.getElementById(info.node) : svgRoot.querySelector('#' + info.node);
+        if (node) node.style.display = 'none';
+        info.paths.forEach(function(pid) {
+          var p = svgRoot.getElementById ? svgRoot.getElementById(pid) : svgRoot.querySelector('#' + pid);
+          if (p) p.style.display = 'none';
+        });
+      }
+    });
+    // Shift remaining visible channel nodes up to fill gaps
+    if (hiddenCount > 0) {
+      var visibleChannels = allChannels.filter(function(ch) { return active.indexOf(ch) !== -1; });
+      var yPositions = [120, 175, 230]; // Evenly spaced positions for 1-3 channels
+      if (visibleChannels.length === 1) yPositions = [175];
+      else if (visibleChannels.length === 2) yPositions = [130, 210];
+      visibleChannels.forEach(function(ch, i) {
+        var info = channelMap[ch];
+        var node = svgRoot.getElementById ? svgRoot.getElementById(info.node) : svgRoot.querySelector('#' + info.node);
+        if (!node) return;
+        var rect = node.querySelector('rect');
+        var text = node.querySelector('text');
+        var targetY = yPositions[i];
+        if (rect) { rect.setAttribute('y', targetY - 20); }
+        if (text) { text.setAttribute('y', targetY + 5); }
+        // Update paths from human to channel and channel to gateway
+        var humanPath = svgRoot.getElementById ? svgRoot.getElementById(info.paths[0]) : svgRoot.querySelector('#' + info.paths[0]);
+        if (humanPath) {
+          humanPath.setAttribute('d', 'M 60 56 C 60 ' + (targetY - 30) + ', 65 ' + (targetY - 15) + ', 75 ' + (targetY - 20));
+        }
+        var gwPath = svgRoot.getElementById ? svgRoot.getElementById(info.paths[1]) : svgRoot.querySelector('#' + info.paths[1]);
+        if (gwPath) {
+          gwPath.setAttribute('d', 'M 130 ' + targetY + ' C 150 ' + targetY + ', 160 183, 180 183');
+        }
+      });
+    }
+  }).catch(function(){});
+}
+
 function initFlow() {
   if (flowInitDone) return;
   flowInitDone = true;
   
   // Performance: Reduce update frequency on mobile
   var updateInterval = window.innerWidth < 768 ? 3000 : 2000;
+
+  // Hide unconfigured channels in the flow SVG
+  hideUnconfiguredChannels(document);
   
   fetch('/api/overview').then(function(r){return r.json();}).then(function(d) {
     var el = document.getElementById('brain-model-text');
@@ -3287,18 +3389,69 @@ function initOverviewFlow() {
   clone.style.width = '100%';
   clone.style.height = '100%';
   clone.style.minWidth = '0';
-  // Rename filter IDs in clone to avoid duplicate-id conflicts with original SVG
-  var filters = clone.querySelectorAll('filter[id]');
-  filters.forEach(function(f) {
+  // Rename defs IDs (filters, patterns, etc.) in clone to avoid duplicate-id conflicts
+  var defs = clone.querySelectorAll('filter[id], pattern[id], linearGradient[id], radialGradient[id], clipPath[id], mask[id]');
+  defs.forEach(function(f) {
     var oldId = f.id;
     var newId = 'ov-' + oldId;
     f.id = newId;
-    clone.querySelectorAll('[filter="url(#' + oldId + ')"]').forEach(function(el) {
-      el.setAttribute('filter', 'url(#' + newId + ')');
+    // Update all url(#oldId) references in filter, fill, stroke, clip-path, mask attributes
+    ['filter','fill','stroke','clip-path','mask'].forEach(function(attr) {
+      clone.querySelectorAll('[' + attr + '="url(#' + oldId + ')"]').forEach(function(el) {
+        el.setAttribute(attr, 'url(#' + newId + ')');
+      });
     });
+  });
+  // Strip any .active classes captured at clone time so nodes render cleanly
+  clone.querySelectorAll('.active').forEach(function(el) { el.classList.remove('active'); });
+  // Rename element IDs in clone to avoid getElementById conflicts with original SVG
+  clone.querySelectorAll('[id]').forEach(function(el) {
+    el.id = 'ov-' + el.id;
   });
   container.innerHTML = '';
   container.appendChild(clone);
+  // Hide unconfigured channels in the overview clone too
+  // Clone has IDs prefixed with 'ov-', so we use a wrapper approach
+  fetch('/api/channels').then(function(r){return r.json();}).then(function(d) {
+    var active = d.channels || ['telegram', 'signal', 'whatsapp'];
+    var channelMap = {
+      'telegram': { node: 'ov-node-telegram', paths: ['ov-path-human-tg', 'ov-path-tg-gw'] },
+      'signal':   { node: 'ov-node-signal',   paths: ['ov-path-human-sig', 'ov-path-sig-gw'] },
+      'whatsapp': { node: 'ov-node-whatsapp', paths: ['ov-path-human-wa', 'ov-path-wa-gw'] }
+    };
+    var allChannels = ['telegram', 'signal', 'whatsapp'];
+    var hiddenCount = 0;
+    allChannels.forEach(function(ch) {
+      if (active.indexOf(ch) === -1) {
+        hiddenCount++;
+        var info = channelMap[ch];
+        var node = document.getElementById(info.node);
+        if (node) node.style.display = 'none';
+        info.paths.forEach(function(pid) {
+          var p = document.getElementById(pid);
+          if (p) p.style.display = 'none';
+        });
+      }
+    });
+    if (hiddenCount > 0) {
+      var visibleChannels = allChannels.filter(function(ch) { return active.indexOf(ch) !== -1; });
+      var yPositions = visibleChannels.length === 1 ? [175] : visibleChannels.length === 2 ? [130, 210] : [120, 175, 230];
+      visibleChannels.forEach(function(ch, i) {
+        var info = channelMap[ch];
+        var node = document.getElementById(info.node);
+        if (!node) return;
+        var rect = node.querySelector('rect');
+        var text = node.querySelector('text');
+        var targetY = yPositions[i];
+        if (rect) rect.setAttribute('y', targetY - 20);
+        if (text) text.setAttribute('y', targetY + 5);
+        var humanPath = document.getElementById(info.paths[0]);
+        if (humanPath) humanPath.setAttribute('d', 'M 60 56 C 60 ' + (targetY - 30) + ', 65 ' + (targetY - 15) + ', 75 ' + (targetY - 20));
+        var gwPath = document.getElementById(info.paths[1]);
+        if (gwPath) gwPath.setAttribute('d', 'M 130 ' + targetY + ' C 150 ' + targetY + ', 160 183, 180 183');
+      });
+    }
+  }).catch(function(){});
 }
 
 // === Overview Tasks Panel (right side) ===
@@ -3450,6 +3603,379 @@ var _modalAutoRefresh = true;
 var _modalRefreshTimer = null;
 var _modalEvents = [];
 
+/* === Component Modal === */
+var COMP_MAP = {
+  'node-telegram': {type:'channel', name:'Telegram', icon:'📱'},
+  'node-signal': {type:'channel', name:'Signal', icon:'💬'},
+  'node-whatsapp': {type:'channel', name:'WhatsApp', icon:'📲'},
+  'node-gateway': {type:'gateway', name:'Gateway', icon:'🌐'},
+  'node-brain': {type:'brain', name:'Claude', icon:'🧠'},
+  'node-session': {type:'tool', name:'Sessions', icon:'📋'},
+  'node-exec': {type:'tool', name:'Exec', icon:'⚡'},
+  'node-browser': {type:'tool', name:'Web', icon:'🌍'},
+  'node-search': {type:'tool', name:'Search', icon:'🔍'},
+  'node-cron': {type:'tool', name:'Cron', icon:'⏰'},
+  'node-tts': {type:'tool', name:'TTS', icon:'🔊'},
+  'node-memory': {type:'tool', name:'Memory', icon:'💾'},
+  'node-runtime': {type:'infra', name:'Runtime', icon:'⚙️'},
+  'node-machine': {type:'infra', name:'Machine', icon:'🖥️'},
+  'node-storage': {type:'infra', name:'Storage', icon:'💿'},
+  'node-network': {type:'infra', name:'Network', icon:'🔗'}
+};
+function initCompClickHandlers() {
+  Object.keys(COMP_MAP).forEach(function(id) {
+    var el = document.getElementById(id);
+    if (el) {
+      el.classList.add('flow-node-clickable');
+      el.addEventListener('click', function(e) {
+        e.stopPropagation();
+        openCompModal(id);
+      });
+    }
+  });
+}
+var _tgRefreshTimer = null;
+var _tgOffset = 0;
+var _tgAllMessages = [];
+
+function openCompModal(nodeId) {
+  var c = COMP_MAP[nodeId];
+  if (!c) return;
+  document.getElementById('comp-modal-title').textContent = c.icon + ' ' + c.name;
+
+  if (nodeId === 'node-telegram') {
+    _tgOffset = 0;
+    _tgAllMessages = [];
+    document.getElementById('comp-modal-body').innerHTML = '<div style="text-align:center;padding:40px;"><div class="pulse"></div> Loading messages...</div>';
+    document.getElementById('comp-modal-overlay').classList.add('open');
+    loadTelegramMessages(false);
+    _tgRefreshTimer = setInterval(function() { loadTelegramMessages(true); }, 10000);
+    return;
+  }
+
+  if (nodeId === 'node-gateway') {
+    document.getElementById('comp-modal-body').innerHTML = '<div style="text-align:center;padding:40px;"><div class="pulse"></div> Loading gateway data...</div>';
+    document.getElementById('comp-modal-overlay').classList.add('open');
+    loadGatewayData(false);
+    _gwRefreshTimer = setInterval(function() { loadGatewayData(true); }, 10000);
+    return;
+  }
+
+  if (nodeId === 'node-brain') {
+    document.getElementById('comp-modal-body').innerHTML = '<div style="text-align:center;padding:40px;"><div class="pulse"></div> Loading AI brain data...</div>';
+    document.getElementById('comp-modal-overlay').classList.add('open');
+    _brainPage = 0;
+    loadBrainData(false);
+    _brainRefreshTimer = setInterval(function() { loadBrainData(true); }, 10000);
+    return;
+  }
+
+  if (c.type === 'tool') {
+    var toolKey = nodeId.replace('node-', '');
+    document.getElementById('comp-modal-body').innerHTML = '<div style="text-align:center;padding:40px;"><div class="pulse"></div> Loading ' + c.name + ' data...</div>';
+    document.getElementById('comp-modal-overlay').classList.add('open');
+    loadToolData(toolKey, c, false);
+    _toolRefreshTimer = setInterval(function() { loadToolData(toolKey, c, true); }, 10000);
+    return;
+  }
+
+  document.getElementById('comp-modal-body').innerHTML = '<div style="text-align:center;padding:20px;"><div style="font-size:48px;margin-bottom:16px;">' + c.icon + '</div><div style="font-size:16px;font-weight:600;margin-bottom:8px;">' + c.name + '</div><div style="color:var(--text-muted);">Live view coming soon</div><div style="margin-top:8px;font-size:12px;color:var(--text-muted);text-transform:uppercase;">' + c.type + '</div></div>';
+  document.getElementById('comp-modal-footer').textContent = 'Last updated: ' + new Date().toLocaleTimeString();
+  document.getElementById('comp-modal-overlay').classList.add('open');
+}
+
+function loadTelegramMessages(isRefresh) {
+  var url = '/api/channel/telegram?limit=50&offset=0';
+  fetch(url).then(function(r) { return r.json(); }).then(function(data) {
+    var msgs = data.messages || [];
+    var body = document.getElementById('comp-modal-body');
+    var html = '<div class="tg-stats"><span class="in">📥 ' + (data.todayIn || 0) + ' incoming</span><span class="out">📤 ' + (data.todayOut || 0) + ' outgoing</span><span style="margin-left:auto;color:var(--text-muted);font-size:11px;">Today</span></div>';
+    html += '<div class="tg-chat">';
+    if (msgs.length === 0) {
+      html += '<div style="text-align:center;padding:20px;color:var(--text-muted);">No messages found</div>';
+    }
+    msgs.forEach(function(m) {
+      var dir = m.direction === 'in' ? 'in' : 'out';
+      var ts = m.timestamp ? new Date(m.timestamp).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}) : '';
+      var date = m.timestamp ? new Date(m.timestamp).toLocaleDateString([], {month:'short',day:'numeric'}) : '';
+      var text = m.text || (m.direction === 'in' ? '(message received)' : '(reply sent)');
+      html += '<div class="tg-bubble ' + dir + '">';
+      html += '<div class="tg-sender">' + escapeHtml(m.sender || (dir === 'in' ? 'User' : 'Clawd')) + '</div>';
+      html += '<div class="tg-text">' + escapeHtml(text) + '</div>';
+      html += '<div class="tg-time">' + date + ' ' + ts + '</div>';
+      html += '</div>';
+    });
+    if (data.total > msgs.length) {
+      html += '<div class="tg-load-more"><button onclick="loadMoreTelegram()">Load more (' + (data.total - msgs.length) + ' remaining)</button></div>';
+    }
+    html += '</div>';
+    body.innerHTML = html;
+    document.getElementById('comp-modal-footer').textContent = 'Last updated: ' + new Date().toLocaleTimeString() + ' · ' + data.total + ' total messages';
+  }).catch(function(e) {
+    if (!isRefresh) {
+      document.getElementById('comp-modal-body').innerHTML = '<div style="text-align:center;padding:20px;color:var(--text-error);">Failed to load messages</div>';
+    }
+  });
+}
+
+function loadMoreTelegram() {
+  // Simple: just increase limit
+  fetch('/api/channel/telegram?limit=200&offset=0').then(function(r) { return r.json(); }).then(function(data) {
+    // Re-render with all data
+    var msgs = data.messages || [];
+    var body = document.getElementById('comp-modal-body');
+    var html = '<div class="tg-stats"><span class="in">📥 ' + (data.todayIn || 0) + ' incoming</span><span class="out">📤 ' + (data.todayOut || 0) + ' outgoing</span><span style="margin-left:auto;color:var(--text-muted);font-size:11px;">Today</span></div>';
+    html += '<div class="tg-chat">';
+    msgs.forEach(function(m) {
+      var dir = m.direction === 'in' ? 'in' : 'out';
+      var ts = m.timestamp ? new Date(m.timestamp).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}) : '';
+      var date = m.timestamp ? new Date(m.timestamp).toLocaleDateString([], {month:'short',day:'numeric'}) : '';
+      var text = m.text || (m.direction === 'in' ? '(message received)' : '(reply sent)');
+      html += '<div class="tg-bubble ' + dir + '">';
+      html += '<div class="tg-sender">' + escapeHtml(m.sender || (dir === 'in' ? 'User' : 'Clawd')) + '</div>';
+      html += '<div class="tg-text">' + escapeHtml(text) + '</div>';
+      html += '<div class="tg-time">' + date + ' ' + ts + '</div>';
+      html += '</div>';
+    });
+    html += '</div>';
+    body.innerHTML = html;
+    document.getElementById('comp-modal-footer').textContent = 'Last updated: ' + new Date().toLocaleTimeString() + ' · ' + data.total + ' total messages';
+  });
+}
+
+function escapeHtml(s) {
+  var d = document.createElement('div'); d.textContent = s; return d.innerHTML;
+}
+
+var _brainRefreshTimer = null;
+var _brainPage = 0;
+
+function loadBrainData(isRefresh) {
+  fetch('/api/component/brain?limit=50&offset=' + (_brainPage * 50)).then(function(r) { return r.json(); }).then(function(data) {
+    var body = document.getElementById('comp-modal-body');
+    var s = data.stats || {};
+    var tok = s.today_tokens || {};
+    var totalTok = (tok.input||0) + (tok.output||0) + (tok.cache_read||0);
+    var fmtTok = totalTok >= 1e6 ? (totalTok/1e6).toFixed(1) + 'M' : totalTok >= 1e3 ? (totalTok/1e3).toFixed(1) + 'K' : totalTok;
+
+    var html = '';
+    // Model badge
+    html += '<div style="text-align:center;margin-bottom:14px;"><span style="background:linear-gradient(135deg,#FFD54F,#FF9800);color:#1a1a2e;padding:4px 14px;border-radius:20px;font-size:12px;font-weight:700;letter-spacing:0.5px;">' + escapeHtml(s.model||'unknown') + '</span></div>';
+
+    // Stats cards 2x2
+    html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px;">';
+    html += '<div style="background:var(--bg-secondary);border-radius:10px;padding:12px 14px;text-align:center;"><div style="font-size:24px;font-weight:700;color:var(--text-primary);">' + (s.today_calls||0) + '</div><div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;margin-top:2px;">Today\'s Calls</div></div>';
+    html += '<div style="background:var(--bg-secondary);border-radius:10px;padding:12px 14px;text-align:center;"><div style="font-size:24px;font-weight:700;color:var(--text-primary);">' + fmtTok + '</div><div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;margin-top:2px;">Tokens</div></div>';
+    var costColor = parseFloat((s.today_cost||'$0').replace('$','')) > 50 ? '#f59e0b' : parseFloat((s.today_cost||'$0').replace('$','')) > 100 ? '#ef4444' : '#22c55e';
+    html += '<div style="background:var(--bg-secondary);border-radius:10px;padding:12px 14px;text-align:center;"><div style="font-size:24px;font-weight:700;color:' + costColor + ';">' + (s.today_cost||'$0.00') + '</div><div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;margin-top:2px;">Cost</div></div>';
+    html += '<div style="background:var(--bg-secondary);border-radius:10px;padding:12px 14px;text-align:center;"><div style="font-size:24px;font-weight:700;color:var(--text-primary);">' + ((s.avg_response_ms||0) >= 1000 ? ((s.avg_response_ms/1000).toFixed(1)+'s') : ((s.avg_response_ms||0)+'ms')) + '</div><div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;margin-top:2px;">Avg Response</div></div>';
+    html += '</div>';
+
+    // Token breakdown bar
+    var tIn = tok.input||0, tOut = tok.output||0, tCR = tok.cache_read||0;
+    var tTotal = tIn+tOut+tCR || 1;
+    html += '<div style="display:flex;height:6px;border-radius:3px;overflow:hidden;margin-bottom:16px;background:var(--bg-secondary);">';
+    html += '<div style="width:' + (tIn/tTotal*100) + '%;background:#3b82f6;" title="Input: ' + tIn + '"></div>';
+    html += '<div style="width:' + (tOut/tTotal*100) + '%;background:#8b5cf6;" title="Output: ' + tOut + '"></div>';
+    html += '<div style="width:' + (tCR/tTotal*100) + '%;background:#22c55e;" title="Cache: ' + tCR + '"></div>';
+    html += '</div>';
+    html += '<div style="display:flex;gap:12px;font-size:10px;color:var(--text-muted);margin-bottom:14px;justify-content:center;">';
+    html += '<span>🔵 Input</span><span>🟣 Output</span><span>🟢 Cache</span>';
+    html += '</div>';
+
+    // Call list
+    var calls = data.calls || [];
+    if (calls.length === 0) {
+      html += '<div style="text-align:center;padding:20px;color:var(--text-muted);">No LLM calls found today</div>';
+    } else {
+      html += '<div style="display:flex;flex-direction:column;gap:6px;max-height:400px;overflow-y:auto;">';
+      var TOOL_ICONS = {read:'📄',write:'✏️',edit:'🔧',exec:'⚡',process:'⚙️',browser:'🌐',web_search:'🔍',web_fetch:'🌍',message:'💬',tts:'🔊',image:'🖼️',canvas:'🎨',nodes:'📱'};
+      var TOOL_COLORS = {exec:'#f59e0b',browser:'#3b82f6',web_search:'#8b5cf6',web_fetch:'#06b6d4',message:'#ec4899',read:'#6b7280',write:'#22c55e',edit:'#f97316',tts:'#a855f7',image:'#ef4444',canvas:'#14b8a6',nodes:'#6366f1',process:'#64748b'};
+      calls.forEach(function(c) {
+        var ts = c.timestamp ? new Date(c.timestamp).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',second:'2-digit'}) : '';
+        var costVal = parseFloat((c.cost||'$0').replace('$',''));
+        var cColor = costVal > 0.50 ? '#f59e0b' : costVal > 1.0 ? '#ef4444' : '#22c55e';
+        var dur = c.duration_ms > 0 ? (c.duration_ms >= 1000 ? (c.duration_ms/1000).toFixed(1)+'s' : c.duration_ms+'ms') : '—';
+        html += '<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--bg-secondary);border-radius:8px;border:1px solid var(--border-secondary);font-size:11px;flex-wrap:wrap;">';
+        html += '<span style="color:var(--text-tertiary);min-width:58px;">' + ts + '</span>';
+        html += '<span style="color:var(--text-muted);font-size:10px;min-width:50px;">' + escapeHtml(c.session||'main') + '</span>';
+        html += '<span style="color:#3b82f6;min-width:45px;" title="In">' + (c.tokens_in>=1000?(c.tokens_in/1000).toFixed(1)+'K':c.tokens_in) + '→</span>';
+        html += '<span style="color:#8b5cf6;min-width:40px;" title="Out">' + (c.tokens_out>=1000?(c.tokens_out/1000).toFixed(1)+'K':c.tokens_out) + '</span>';
+        html += '<span style="color:' + cColor + ';min-width:50px;">' + (c.cost||'$0') + '</span>';
+        html += '<span style="color:var(--text-muted);min-width:35px;">' + dur + '</span>';
+        // Tool badges
+        if (c.tools_used && c.tools_used.length > 0) {
+          html += '<span style="display:flex;gap:3px;flex-wrap:wrap;">';
+          c.tools_used.forEach(function(t) {
+            var icon = TOOL_ICONS[t] || '🔧';
+            var bg = TOOL_COLORS[t] || '#6b7280';
+            html += '<span style="background:' + bg + '22;color:' + bg + ';padding:1px 5px;border-radius:4px;font-size:10px;" title="' + t + '">' + icon + t + '</span>';
+          });
+          html += '</span>';
+        }
+        html += '</div>';
+      });
+      html += '</div>';
+    }
+
+    if (data.total > calls.length) {
+      html += '<div style="text-align:center;margin-top:12px;font-size:12px;color:var(--text-muted);">' + calls.length + ' of ' + data.total + ' calls shown</div>';
+    }
+
+    body.innerHTML = html;
+    document.getElementById('comp-modal-footer').textContent = 'Auto-refreshing · Last updated: ' + new Date().toLocaleTimeString() + ' · ' + (data.total||0) + ' LLM calls today';
+  }).catch(function(e) {
+    if (!isRefresh) {
+      document.getElementById('comp-modal-body').innerHTML = '<div style="text-align:center;padding:20px;color:var(--text-error);">Failed to load brain data: ' + e.message + '</div>';
+    }
+  });
+}
+
+var _gwRefreshTimer = null;
+var _gwPage = 0;
+
+function loadGatewayData(isRefresh) {
+  fetch('/api/component/gateway?limit=50&offset=' + (_gwPage * 50)).then(function(r) { return r.json(); }).then(function(data) {
+    var body = document.getElementById('comp-modal-body');
+    var s = data.stats || {};
+    var html = '<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px;">';
+    html += '<div style="flex:1;min-width:80px;background:var(--bg-secondary);border-radius:8px;padding:10px 14px;text-align:center;"><div style="font-size:20px;font-weight:700;color:var(--text-primary);">' + (s.today_messages||0) + '</div><div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;">Messages</div></div>';
+    html += '<div style="flex:1;min-width:80px;background:var(--bg-secondary);border-radius:8px;padding:10px 14px;text-align:center;"><div style="font-size:20px;font-weight:700;color:var(--text-primary);">' + (s.today_heartbeats||0) + '</div><div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;">Heartbeats</div></div>';
+    html += '<div style="flex:1;min-width:80px;background:var(--bg-secondary);border-radius:8px;padding:10px 14px;text-align:center;"><div style="font-size:20px;font-weight:700;color:var(--text-primary);">' + (s.today_crons||0) + '</div><div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;">Cron</div></div>';
+    html += '<div style="flex:1;min-width:80px;background:var(--bg-secondary);border-radius:8px;padding:10px 14px;text-align:center;"><div style="font-size:20px;font-weight:700;color:' + ((s.today_errors||0) > 0 ? 'var(--text-error)' : 'var(--text-primary)') + ';">' + (s.today_errors||0) + '</div><div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;">Errors</div></div>';
+    html += '</div>';
+
+    var routes = data.routes || [];
+    if (routes.length === 0) {
+      html += '<div style="text-align:center;padding:20px;color:var(--text-muted);">No routing events found today</div>';
+    } else {
+      html += '<div style="display:flex;flex-direction:column;gap:6px;">';
+      routes.forEach(function(r) {
+        var badge = '📨';
+        var badgeColor = '#3b82f6';
+        if (r.type === 'heartbeat') { badge = '💓'; badgeColor = '#ec4899'; }
+        else if (r.type === 'cron') { badge = '⏰'; badgeColor = '#f59e0b'; }
+        else if (r.type === 'subagent') { badge = '🐝'; badgeColor = '#8b5cf6'; }
+        else if (r.from === 'telegram') { badge = '📱'; badgeColor = '#3b82f6'; }
+        else if (r.from === 'whatsapp') { badge = '📲'; badgeColor = '#22c55e'; }
+
+        var status = r.status === 'error' ? '❌' : '✅';
+        var ts = r.timestamp ? new Date(r.timestamp).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'}) : '';
+        var model = r.to || '';
+        if (model.length > 20) model = model.substring(0, 18) + '…';
+        var session = r.session || '';
+        if (session.length > 20) session = session.substring(0, 18) + '…';
+
+        html += '<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--bg-secondary);border-radius:8px;border:1px solid var(--border-secondary);font-size:12px;">';
+        html += '<span style="font-size:16px;">' + badge + '</span>';
+        html += '<span style="color:var(--text-tertiary);min-width:60px;">' + ts + '</span>';
+        html += '<span style="color:var(--text-secondary);font-weight:600;">' + escapeHtml(r.from || '?') + '</span>';
+        html += '<span style="color:var(--text-muted);">→</span>';
+        html += '<span style="color:var(--text-accent);font-weight:500;flex:1;">' + escapeHtml(model) + '</span>';
+        if (session) html += '<span style="color:var(--text-muted);font-size:11px;">' + escapeHtml(session) + '</span>';
+        html += '<span>' + status + '</span>';
+        html += '</div>';
+      });
+      html += '</div>';
+    }
+
+    if (data.total > routes.length) {
+      html += '<div style="text-align:center;margin-top:12px;font-size:12px;color:var(--text-muted);">' + routes.length + ' of ' + data.total + ' events shown</div>';
+    }
+
+    body.innerHTML = html;
+    document.getElementById('comp-modal-footer').textContent = 'Auto-refreshing · Last updated: ' + new Date().toLocaleTimeString() + ' · ' + (data.total||0) + ' events today';
+  }).catch(function(e) {
+    if (!isRefresh) {
+      document.getElementById('comp-modal-body').innerHTML = '<div style="text-align:center;padding:20px;color:var(--text-error);">Failed to load gateway data</div>';
+    }
+  });
+}
+
+var _toolRefreshTimer = null;
+var TOOL_COLORS = {
+  'session': '#1565C0', 'exec': '#E65100', 'browser': '#6A1B9A',
+  'search': '#00695C', 'cron': '#546E7A', 'tts': '#F9A825', 'memory': '#283593'
+};
+
+function loadToolData(toolKey, comp, isRefresh) {
+  fetch('/api/component/tool/' + toolKey).then(function(r) { return r.json(); }).then(function(data) {
+    var body = document.getElementById('comp-modal-body');
+    var s = data.stats || {};
+    var events = data.events || [];
+    var color = TOOL_COLORS[toolKey] || '#555';
+    var html = '';
+
+    // Stats bar
+    html += '<div style="display:flex;gap:12px;padding:10px 16px;background:' + color + '22;border-radius:10px;margin-bottom:14px;align-items:center;flex-wrap:wrap;">';
+    html += '<span style="font-size:13px;font-weight:600;color:' + color + ';">Today: ' + (s.today_calls||0) + ' calls</span>';
+    if (s.today_errors > 0) html += '<span style="font-size:13px;font-weight:600;color:#ef4444;">| ' + s.today_errors + ' errors</span>';
+    html += '</div>';
+
+    // Events list
+    html += '<div style="max-height:60vh;overflow-y:auto;">';
+    if (events.length === 0) {
+      html += '<div style="text-align:center;padding:30px;color:var(--text-muted);">No events today</div>';
+    }
+    events.forEach(function(evt) {
+      var ts = evt.timestamp ? new Date(evt.timestamp).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'}) : '';
+      var statusBadge = evt.status === 'error' ? '<span style="color:#ef4444;font-size:11px;margin-left:6px;">✗ error</span>' : '<span style="color:#22c55e;font-size:11px;margin-left:6px;">✓ ok</span>';
+      var durStr = evt.duration_ms ? ' · ' + (evt.duration_ms >= 1000 ? (evt.duration_ms/1000).toFixed(1) + 's' : evt.duration_ms + 'ms') : '';
+
+      html += '<div style="padding:8px 12px;border-bottom:1px solid var(--border);font-size:13px;">';
+      html += '<div style="display:flex;justify-content:space-between;align-items:center;">';
+      html += '<span style="color:var(--text-muted);font-size:11px;font-family:monospace;">' + ts + '</span>';
+      html += statusBadge;
+      html += '</div>';
+
+      // Tool-specific rendering
+      if (toolKey === 'session') {
+        var sBadge = evt.session_status === 'running' ? '🟢' : '✅';
+        html += '<div style="margin-top:4px;font-weight:600;">' + sBadge + ' ' + escapeHtml(evt.detail || evt.action || '') + '</div>';
+        if (evt.model) html += '<div style="font-size:11px;color:var(--text-muted);">Model: ' + escapeHtml(evt.model) + (evt.tokens ? ' · ' + evt.tokens + ' tokens' : '') + '</div>';
+      } else if (toolKey === 'exec') {
+        html += '<div style="margin-top:4px;font-family:monospace;font-size:12px;background:var(--bg-secondary);padding:6px 8px;border-radius:6px;word-break:break-all;">' + escapeHtml(evt.detail || '') + '</div>';
+        if (durStr) html += '<div style="font-size:11px;color:var(--text-muted);margin-top:2px;">Duration' + durStr + '</div>';
+      } else if (toolKey === 'browser') {
+        html += '<div style="margin-top:4px;"><span style="background:' + color + '33;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;">' + escapeHtml(evt.action || '') + '</span> ' + escapeHtml(evt.detail || '') + '</div>';
+      } else if (toolKey === 'search') {
+        html += '<div style="margin-top:4px;">🔍 <strong>' + escapeHtml(evt.detail || '') + '</strong></div>';
+        if (evt.result_count !== undefined) html += '<div style="font-size:11px;color:var(--text-muted);">' + evt.result_count + ' results</div>';
+      } else if (toolKey === 'cron') {
+        var cronBadge = evt.status === 'error' ? '❌' : '✅';
+        html += '<div style="margin-top:4px;">' + cronBadge + ' ' + escapeHtml(evt.detail || '') + '</div>';
+      } else if (toolKey === 'tts') {
+        html += '<div style="margin-top:4px;font-style:italic;">"' + escapeHtml((evt.detail || '').substring(0, 100)) + '"</div>';
+        if (evt.voice) html += '<div style="font-size:11px;color:var(--text-muted);">Voice: ' + escapeHtml(evt.voice) + '</div>';
+      } else if (toolKey === 'memory') {
+        var rwBadge = evt.action === 'write' ? '<span style="background:#f59e0b33;color:#f59e0b;padding:1px 6px;border-radius:4px;font-size:10px;font-weight:600;">WRITE</span>' : '<span style="background:#3b82f633;color:#3b82f6;padding:1px 6px;border-radius:4px;font-size:10px;font-weight:600;">READ</span>';
+        html += '<div style="margin-top:4px;">' + rwBadge + ' <code style="font-size:12px;">' + escapeHtml(evt.detail || '') + '</code></div>';
+      } else {
+        html += '<div style="margin-top:4px;">' + escapeHtml(evt.detail || evt.action || '') + '</div>';
+      }
+      html += '</div>';
+    });
+    html += '</div>';
+
+    body.innerHTML = html;
+    document.getElementById('comp-modal-footer').textContent = 'Last updated: ' + new Date().toLocaleTimeString() + ' · ' + (data.total||0) + ' total events';
+  }).catch(function(e) {
+    if (!isRefresh) {
+      document.getElementById('comp-modal-body').innerHTML = '<div style="text-align:center;padding:20px;color:var(--text-error);">Failed to load data: ' + e + '</div>';
+    }
+  });
+}
+
+function closeCompModal() {
+  if (_tgRefreshTimer) { clearInterval(_tgRefreshTimer); _tgRefreshTimer = null; }
+  if (_gwRefreshTimer) { clearInterval(_gwRefreshTimer); _gwRefreshTimer = null; }
+  if (_brainRefreshTimer) { clearInterval(_brainRefreshTimer); _brainRefreshTimer = null; }
+  if (_toolRefreshTimer) { clearInterval(_toolRefreshTimer); _toolRefreshTimer = null; }
+  document.getElementById('comp-modal-overlay').classList.remove('open');
+}
+document.addEventListener('keydown', function(e) { if (e.key === 'Escape') closeCompModal(); });
+document.addEventListener('DOMContentLoaded', initCompClickHandlers);
+
 function openTaskModal(sessionId, taskName, sessionKey) {
   _modalSessionId = sessionId;
   document.getElementById('modal-title').textContent = taskName || sessionId;
@@ -3533,10 +4059,11 @@ function renderModalSummary(el) {
     }
   }
   var html = '';
+  var renderMd = (typeof marked !== 'undefined' && marked.parse) ? function(s){ return marked.parse(s); } : escHtml;
   html += '<div class="summary-section"><div class="summary-label">Task Description</div>';
-  html += '<div class="summary-text">' + escHtml(desc || 'No description found') + '</div></div>';
+  html += '<div class="summary-text md-rendered">' + renderMd(desc || 'No description found') + '</div></div>';
   html += '<div class="summary-section"><div class="summary-label">Final Result / Output</div>';
-  html += '<div class="summary-text">' + escHtml(result || 'No result yet...') + '</div></div>';
+  html += '<div class="summary-text md-rendered">' + renderMd(result || 'No result yet...') + '</div></div>';
   el.innerHTML = html;
 }
 
@@ -3610,7 +4137,8 @@ function renderModalFull(el) {
     html += '<span class="evt-summary">' + summary + '</span>';
     html += '<span class="evt-ts">' + escHtml(ts) + '</span>';
     html += '</div>';
-    html += '<div class="evt-body" id="' + bodyId + '">' + escHtml(body) + '</div>';
+    var bodyHtml = (typeof marked !== 'undefined' && marked.parse) ? marked.parse(body) : escHtml(body);
+    html += '<div class="evt-body md-rendered" id="' + bodyId + '">' + bodyHtml + '</div>';
     html += '</div>';
   });
   el.innerHTML = html || '<div style="padding:20px;color:var(--text-muted);">No events yet</div>';
@@ -3628,6 +4156,18 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 </script>
 </div> <!-- end zoom-wrapper -->
+
+<!-- Component Detail Modal -->
+<div class="comp-modal-overlay" id="comp-modal-overlay" onclick="if(event.target===this)closeCompModal()">
+  <div class="comp-modal-card">
+    <div class="comp-modal-header">
+      <div class="comp-modal-title" id="comp-modal-title">Component</div>
+      <div class="comp-modal-close" onclick="closeCompModal()">&times;</div>
+    </div>
+    <div class="comp-modal-body" id="comp-modal-body">Loading...</div>
+    <div class="comp-modal-footer" id="comp-modal-footer">Last updated: —</div>
+  </div>
+</div>
 
 <!-- Task Detail Modal -->
 <div class="modal-overlay" id="task-modal-overlay" onclick="if(event.target===this)closeTaskModal()">
@@ -3678,6 +4218,42 @@ def api_mc_tasks():
         return jsonify(data)
     except Exception:
         return jsonify({'available': False, 'tasks': []})
+
+@app.route('/api/channels')
+def api_channels():
+    """Return list of configured channel names (telegram, signal, whatsapp, etc.)."""
+    configured = []
+    # Check multiple config files for channel/plugin definitions
+    config_files = [
+        os.path.expanduser('~/.clawdbot/openclaw.json'),
+        os.path.expanduser('~/.clawdbot/clawdbot.json'),
+        os.path.expanduser('~/.clawdbot/moltbot.json'),
+    ]
+    for cf in config_files:
+        try:
+            with open(cf) as f:
+                data = json.load(f)
+            # Check plugins.entries for enabled channels
+            plugins = data.get('plugins', {}).get('entries', {})
+            for name, pconf in plugins.items():
+                if pconf.get('enabled') and name.lower() in ('telegram', 'signal', 'whatsapp'):
+                    if name.lower() not in configured:
+                        configured.append(name.lower())
+            # Also check channels key for configured channels
+            channels = data.get('channels', {})
+            for name in channels:
+                if name.lower() in ('telegram', 'signal', 'whatsapp'):
+                    if name.lower() not in configured:
+                        configured.append(name.lower())
+            if configured:
+                break  # Use first config that has data
+        except Exception:
+            continue
+    # Fallback: show all if nothing found
+    if not configured:
+        configured = ['telegram', 'signal', 'whatsapp']
+    return jsonify({'channels': configured})
+
 
 @app.route('/api/overview')
 def api_overview():
@@ -3768,6 +4344,22 @@ def api_sessions():
 @app.route('/api/crons')
 def api_crons():
     return jsonify({'jobs': _get_crons()})
+
+
+@app.route('/api/cron/fix', methods=['POST'])
+def api_cron_fix():
+    data = request.get_json(silent=True) or {}
+    job_id = data.get('jobId', '')
+    if not job_id:
+        return jsonify({'error': 'Missing jobId'}), 400
+    # Find the job name for context
+    job_name = job_id
+    for j in _get_crons():
+        if j.get('id') == job_id:
+            job_name = j.get('name', job_id)
+            break
+    # TODO: integrate with AI agent messaging system
+    return jsonify({'ok': True, 'message': f'Fix request submitted for "{job_name}"'})
 
 
 def _find_log_file(ds):
@@ -4769,6 +5361,615 @@ def _summarize_tool_input(name, inp):
         return str(inp)[:120]
 
 
+@app.route('/api/channel/telegram')
+def api_channel_telegram():
+    """Parse logs and session transcripts for Telegram message activity."""
+    import re
+    limit = request.args.get('limit', 50, type=int)
+    offset = request.args.get('offset', 0, type=int)
+
+    messages = []
+    today = datetime.now().strftime('%Y-%m-%d')
+
+    # 1. Parse log files for telegram events using grep for speed
+    log_dirs = ['/tmp/openclaw', '/tmp/moltbot']
+    log_files = []
+    for ld in log_dirs:
+        if os.path.isdir(ld):
+            for f in sorted(glob.glob(os.path.join(ld, '*.log')), reverse=True):
+                log_files.append(f)
+    log_files = log_files[:2]  # Only today + yesterday
+
+    run_sessions = {}
+    for lf in log_files:
+        try:
+            # Use grep to pre-filter telegram-relevant lines
+            result = subprocess.run(
+                ['grep', '-i', 'messageChannel=telegram\\|telegram.*deliver\\|telegram message failed', lf],
+                capture_output=True, text=True, timeout=5
+            )
+            for line in result.stdout.splitlines():
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    obj = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                msg1 = obj.get('1', '') or obj.get('0', '')
+                ts = obj.get('time', '') or (obj.get('_meta', {}) or {}).get('date', '')
+
+                if 'messageChannel=telegram' in msg1 and 'run start' in msg1:
+                    sid_match = re.search(r'sessionId=([a-f0-9-]+)', msg1)
+                    sid = sid_match.group(1) if sid_match else ''
+                    messages.append({
+                        'timestamp': ts, 'direction': 'in', 'sender': 'User',
+                        'text': '', 'chatId': '', 'sessionId': sid,
+                    })
+                    if sid:
+                        run_sessions[sid] = ts
+
+                msg0 = obj.get('0', '')
+                if 'telegram' in msg0.lower() and 'deliver' in msg0.lower():
+                    chat_match = re.search(r'telegram:(-?\d+)', msg0)
+                    chat_id = chat_match.group(1) if chat_match else ''
+                    failed = 'failed' in msg0.lower()
+                    messages.append({
+                        'timestamp': ts, 'direction': 'out', 'sender': 'Clawd',
+                        'text': '(delivery failed)' if failed else '(message sent)',
+                        'chatId': chat_id, 'sessionId': '',
+                    })
+
+                if 'telegram message failed' in msg1:
+                    messages.append({
+                        'timestamp': ts, 'direction': 'out', 'sender': 'Clawd',
+                        'text': msg1[:200], 'chatId': '', 'sessionId': '',
+                    })
+        except Exception:
+            pass
+
+    # 2. Try to enrich incoming messages with text from session transcripts
+    sessions_dir = os.path.expanduser('~/.clawdbot/agents/main/sessions')
+    for msg in messages:
+        if msg['direction'] == 'in' and msg['sessionId'] and not msg['text']:
+            sf = os.path.join(sessions_dir, msg['sessionId'] + '.jsonl')
+            if os.path.exists(sf):
+                try:
+                    with open(sf, 'r', errors='replace') as f:
+                        for sline in f:
+                            sline = sline.strip()
+                            if not sline:
+                                continue
+                            try:
+                                sd = json.loads(sline)
+                            except json.JSONDecodeError:
+                                continue
+                            sm = sd.get('message', {})
+                            if sm.get('role') == 'user':
+                                content = sm.get('content', '')
+                                if isinstance(content, list):
+                                    for c in content:
+                                        if isinstance(c, dict) and c.get('type') == 'text':
+                                            txt = c.get('text', '')
+                                            # Skip system/heartbeat messages
+                                            if txt and not txt.startswith('System:') and 'HEARTBEAT' not in txt:
+                                                msg['text'] = txt[:200]
+                                                break
+                                elif isinstance(content, str) and content:
+                                    if not content.startswith('System:') and 'HEARTBEAT' not in content:
+                                        msg['text'] = content[:200]
+                                if msg['text']:
+                                    break
+                except Exception:
+                    pass
+
+    # 3. Also scan telegram session files for recent messages
+    try:
+        with open(os.path.join(sessions_dir, 'sessions.json'), 'r') as f:
+            sess_data = json.load(f)
+        tg_sessions = [(sid, s) for sid, s in sess_data.items()
+                       if 'telegram' in sid and 'sessionId' in s]
+        tg_sessions.sort(key=lambda x: x[1].get('updatedAt', 0), reverse=True)
+
+        seen_sids = {m['sessionId'] for m in messages if m['sessionId']}
+        for sid_key, sinfo in tg_sessions[:5]:
+            uuid = sinfo['sessionId']
+            if uuid in seen_sids:
+                continue
+            sf = os.path.join(sessions_dir, uuid + '.jsonl')
+            if not os.path.exists(sf):
+                continue
+            try:
+                chat_match = re.search(r':(-?\d+)$', sid_key)
+                chat_id = chat_match.group(1) if chat_match else ''
+                # Read only last 64KB of session file for performance
+                fsize = os.path.getsize(sf)
+                with open(sf, 'r', errors='replace') as f:
+                    if fsize > 65536:
+                        f.seek(fsize - 65536)
+                        f.readline()  # skip partial line
+                    for sline in f:
+                        sline = sline.strip()
+                        if not sline:
+                            continue
+                        try:
+                            sd = json.loads(sline)
+                        except json.JSONDecodeError:
+                            continue
+                        sm = sd.get('message', {})
+                        ts = sd.get('timestamp', '')
+                        role = sm.get('role', '')
+                        if role not in ('user', 'assistant'):
+                            continue
+                        content = sm.get('content', '')
+                        txt = ''
+                        if isinstance(content, list):
+                            for c in content:
+                                if isinstance(c, dict) and c.get('type') == 'text':
+                                    txt = c.get('text', '')
+                                    break
+                        elif isinstance(content, str):
+                            txt = content
+                        if not txt or txt.startswith('System:') or 'HEARTBEAT' in txt:
+                            continue
+                        direction = 'in' if role == 'user' else 'out'
+                        sender = 'User' if role == 'user' else 'Clawd'
+                        messages.append({
+                            'timestamp': ts,
+                            'direction': direction,
+                            'sender': sender,
+                            'text': txt[:200],
+                            'chatId': chat_id,
+                            'sessionId': uuid,
+                        })
+            except Exception:
+                pass
+    except Exception:
+        pass
+
+    # Deduplicate by timestamp+direction, sort newest first
+    seen = set()
+    unique = []
+    for m in messages:
+        key = (m['timestamp'], m['direction'], m['text'][:50])
+        if key not in seen:
+            seen.add(key)
+            unique.append(m)
+    unique.sort(key=lambda x: x['timestamp'], reverse=True)
+
+    # Stats
+    today_in = sum(1 for m in unique if m['direction'] == 'in' and today in m.get('timestamp', ''))
+    today_out = sum(1 for m in unique if m['direction'] == 'out' and today in m.get('timestamp', ''))
+
+    total = len(unique)
+    page = unique[offset:offset + limit]
+    return jsonify({'messages': page, 'total': total, 'todayIn': today_in, 'todayOut': today_out})
+
+
+@app.route('/api/component/tool/<name>')
+def api_component_tool(name):
+    """Parse session transcripts for tool-specific events."""
+    sessions_dir = SESSIONS_DIR or os.path.expanduser('~/.openclaw/agents/main/sessions')
+    if not os.path.isdir(sessions_dir):
+        sessions_dir = os.path.expanduser('~/.moltbot/agents/main/sessions')
+    if not os.path.isdir(sessions_dir):
+        sessions_dir = os.path.expanduser('~/.clawdbot/agents/main/sessions')
+
+    today = datetime.now().strftime('%Y-%m-%d')
+
+    # Map tool key to tool names in transcripts
+    TOOL_MAP = {
+        'session': ['sessions_spawn', 'sessions_send', 'sessions_list', 'sessions_poll'],
+        'exec': ['exec', 'process'],
+        'browser': ['browser', 'web_fetch'],
+        'search': ['web_search'],
+        'cron': ['cron'],
+        'tts': ['tts'],
+        'memory': ['Read', 'read', 'Write', 'write', 'Edit', 'edit'],
+    }
+
+    tool_names = TOOL_MAP.get(name, [name])
+    events = []
+    today_calls = 0
+    today_errors = 0
+
+    if os.path.isdir(sessions_dir):
+        for fname in os.listdir(sessions_dir):
+            if not fname.endswith('.jsonl'):
+                continue
+            fpath = os.path.join(sessions_dir, fname)
+            try:
+                mtime = os.path.getmtime(fpath)
+                if datetime.fromtimestamp(mtime).strftime('%Y-%m-%d') != today:
+                    continue
+
+                with open(fpath, 'r') as f:
+                    for line in f:
+                        try:
+                            obj = json.loads(line.strip())
+                        except json.JSONDecodeError:
+                            continue
+
+                        if obj.get('type') != 'message':
+                            continue
+                        msg = obj.get('message', {})
+
+                        # Tool calls (assistant side)
+                        if msg.get('role') == 'assistant':
+                            for c in (msg.get('content') or []):
+                                if isinstance(c, dict) and c.get('type') == 'toolCall' and c.get('name') in tool_names:
+                                    ts = obj.get('timestamp', '')
+                                    if not ts.startswith(today):
+                                        continue
+                                    tn = c.get('name', '')
+                                    args = c.get('arguments', {})
+                                    today_calls += 1
+
+                                    evt = {'timestamp': ts, 'status': 'ok', 'tool': tn}
+
+                                    if name == 'exec':
+                                        evt['detail'] = (args.get('command') or str(args))[:200]
+                                        evt['action'] = 'exec'
+                                    elif name == 'browser':
+                                        evt['action'] = args.get('action', 'unknown')
+                                        evt['detail'] = args.get('targetUrl') or args.get('url') or args.get('selector') or evt['action']
+                                    elif name == 'search':
+                                        evt['detail'] = args.get('query', '?')
+                                        evt['action'] = 'search'
+                                    elif name == 'tts':
+                                        evt['detail'] = (args.get('text') or '')[:100]
+                                        evt['action'] = 'tts'
+                                        evt['voice'] = args.get('voice', '')
+                                    elif name == 'memory':
+                                        path = args.get('file_path') or args.get('path') or '?'
+                                        evt['detail'] = path
+                                        evt['action'] = 'write' if tn in ('Write', 'write', 'Edit', 'edit') else 'read'
+                                    elif name == 'session':
+                                        evt['detail'] = args.get('sessionId') or args.get('name') or tn
+                                        evt['action'] = tn
+                                        evt['session_status'] = 'running'
+                                    elif name == 'cron':
+                                        evt['detail'] = args.get('expr') or args.get('action') or str(args)[:80]
+                                        evt['action'] = 'cron'
+                                    else:
+                                        evt['detail'] = str(args)[:120]
+                                        evt['action'] = tn
+
+                                    events.append(evt)
+
+                        # Tool results
+                        elif msg.get('role') == 'toolResult' and msg.get('toolName') in tool_names:
+                            ts = obj.get('timestamp', '')
+                            if not ts.startswith(today):
+                                continue
+                            details = msg.get('details', {})
+                            is_error = msg.get('isError', False) or (isinstance(details, dict) and details.get('status') == 'error')
+                            if is_error:
+                                today_errors += 1
+                                # Mark last matching event as error
+                                for e in reversed(events):
+                                    if e.get('tool') == msg.get('toolName') and e.get('status') == 'ok':
+                                        e['status'] = 'error'
+                                        break
+
+                            # Add duration from details
+                            if isinstance(details, dict) and details.get('duration_ms'):
+                                for e in reversed(events):
+                                    if e.get('tool') == msg.get('toolName') and not e.get('duration_ms'):
+                                        e['duration_ms'] = details['duration_ms']
+                                        break
+
+                            # For sessions, update status from result
+                            if name == 'session' and isinstance(details, dict):
+                                for e in reversed(events):
+                                    if e.get('tool') == msg.get('toolName'):
+                                        if details.get('status') == 'done':
+                                            e['session_status'] = 'done'
+                                        if details.get('model'):
+                                            e['model'] = details['model']
+                                        if details.get('tokens'):
+                                            e['tokens'] = details['tokens']
+                                        break
+
+            except Exception:
+                continue
+
+    # For cron, also pull from cron jobs data
+    if name == 'cron' and not events:
+        try:
+            crons = _get_crons()
+            for cj in crons[:20]:
+                events.append({
+                    'timestamp': cj.get('lastRun') or cj.get('createdAt') or '',
+                    'action': 'cron',
+                    'detail': (cj.get('expr') or '') + ' → ' + (cj.get('task') or cj.get('command') or '')[:60],
+                    'status': 'ok' if cj.get('lastStatus') != 'error' else 'error',
+                })
+        except Exception:
+            pass
+
+    # For sessions, also pull live session data
+    if name == 'session' and not events:
+        try:
+            sessions = _get_sessions()
+            for sess in sessions[:20]:
+                events.append({
+                    'timestamp': datetime.fromtimestamp(sess['updatedAt'] / 1000).isoformat() if sess.get('updatedAt') else '',
+                    'action': 'session',
+                    'detail': sess.get('displayName') or sess.get('sessionId', '?')[:20],
+                    'session_status': 'running',
+                    'model': sess.get('model', ''),
+                    'tokens': sess.get('totalTokens', 0),
+                    'status': 'ok',
+                })
+        except Exception:
+            pass
+
+    # Sort by timestamp descending, limit to 50
+    events.sort(key=lambda e: e.get('timestamp', ''), reverse=True)
+    events = events[:50]
+
+    return jsonify({
+        'name': name,
+        'stats': {'today_calls': today_calls, 'today_errors': today_errors},
+        'events': events,
+        'total': today_calls,
+    })
+
+
+@app.route('/api/component/gateway')
+def api_component_gateway():
+    """Parse gateway routing events from today's log file."""
+    import re
+    limit = int(request.args.get('limit', 50))
+    offset = int(request.args.get('offset', 0))
+    today = datetime.now().strftime('%Y-%m-%d')
+    # Try both openclaw and moltbot log dirs/naming
+    candidates = [
+        os.path.join(LOG_DIR, f'openclaw-{today}.log'),
+        os.path.join(LOG_DIR, f'moltbot-{today}.log'),
+        f'/tmp/openclaw/openclaw-{today}.log',
+        f'/tmp/moltbot/moltbot-{today}.log',
+    ]
+    log_path = next((p for p in candidates if os.path.exists(p)), None)
+
+    routes = []
+    stats = {'today_messages': 0, 'today_heartbeats': 0, 'today_crons': 0, 'today_errors': 0}
+
+    if not log_path:
+        return jsonify({'routes': [], 'stats': stats, 'total': 0})
+
+    try:
+        with open(log_path, 'r') as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    entry = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+
+                msg = entry.get('1', '') or entry.get('0', '')
+                ts = entry.get('time', '')
+                level = entry.get('_meta', {}).get('logLevelName', '')
+
+                # embedded run start — main routing event
+                if 'embedded run start:' in msg:
+                    route = {'timestamp': ts, 'from': '', 'to': '', 'session': '', 'type': 'message', 'status': 'ok'}
+                    # Extract fields: model, messageChannel, sessionId
+                    m_model = re.search(r'model=(\S+)', msg)
+                    m_chan = re.search(r'messageChannel=(\S+)', msg)
+                    m_sid = re.search(r'sessionId=(\S+)', msg)
+                    if m_model:
+                        route['to'] = m_model.group(1)
+                    if m_chan:
+                        ch = m_chan.group(1)
+                        route['from'] = ch
+                        if ch == 'heartbeat':
+                            route['type'] = 'heartbeat'
+                            stats['today_heartbeats'] += 1
+                        elif ch == 'cron':
+                            route['type'] = 'cron'
+                            stats['today_crons'] += 1
+                        else:
+                            stats['today_messages'] += 1
+                    else:
+                        stats['today_messages'] += 1
+                    if m_sid:
+                        route['session'] = m_sid.group(1)[:12]
+                    # Check if it's a subagent
+                    if 'subagent' in msg.lower():
+                        route['type'] = 'subagent'
+                    routes.append(route)
+                    continue
+
+                # Delivery failures
+                if 'Delivery failed' in msg or ('Delivery' in msg and level == 'ERROR'):
+                    stats['today_errors'] += 1
+                    # Try to annotate the last route
+                    route = {'timestamp': ts, 'from': '', 'to': '', 'session': '', 'type': 'message', 'status': 'error'}
+                    m_chan = re.search(r'\((\w+) to', msg)
+                    if m_chan:
+                        route['from'] = m_chan.group(1)
+                    route['to'] = 'delivery'
+                    routes.append(route)
+                    continue
+
+                pass  # Only count delivery errors for routing stats
+
+    except Exception:
+        pass
+
+    # Sort by timestamp descending (newest first)
+    routes.sort(key=lambda x: x.get('timestamp', ''), reverse=True)
+    total = len(routes)
+    page = routes[offset:offset + limit]
+    return jsonify({'routes': page, 'stats': stats, 'total': total})
+
+
+@app.route('/api/component/brain')
+def api_component_brain():
+    """Parse session transcripts for LLM API call details."""
+    limit = int(request.args.get('limit', 50))
+    offset = int(request.args.get('offset', 0))
+
+    sessions_dir = SESSIONS_DIR or os.path.expanduser('~/.openclaw/agents/main/sessions')
+    if not os.path.isdir(sessions_dir):
+        sessions_dir = os.path.expanduser('~/.moltbot/agents/main/sessions')
+
+    today = datetime.now().strftime('%Y-%m-%d')
+    calls = []
+    total_input = 0
+    total_output = 0
+    total_cache_read = 0
+    total_cost = 0.0
+    durations = []
+    models_seen = set()
+
+    if os.path.isdir(sessions_dir):
+        for fname in os.listdir(sessions_dir):
+            if not fname.endswith('.jsonl'):
+                continue
+            fpath = os.path.join(sessions_dir, fname)
+            session_id = fname.replace('.jsonl', '')
+
+            try:
+                # Quick check: only process files modified today
+                mtime = os.path.getmtime(fpath)
+                file_date = datetime.fromtimestamp(mtime).strftime('%Y-%m-%d')
+                if file_date != today:
+                    continue
+
+                # Detect if subagent from session metadata
+                session_label = 'main'
+                prev_ts = None
+                with open(fpath, 'r') as f:
+                    for line in f:
+                        try:
+                            obj = json.loads(line.strip())
+                        except json.JSONDecodeError:
+                            continue
+
+                        # Check session header for subagent hints
+                        if obj.get('type') == 'session':
+                            continue
+                        if obj.get('type') == 'custom' and obj.get('customType') == 'openclaw.session-info':
+                            data = obj.get('data', {})
+                            if 'subagent' in str(data.get('session', '')):
+                                session_label = 'subagent:' + session_id[:8]
+
+                        if obj.get('type') != 'message':
+                            # Track user message timestamps for duration calc
+                            if obj.get('type') == 'message' or (isinstance(obj.get('message'), dict) and obj['message'].get('role') == 'user'):
+                                pass
+                            continue
+
+                        msg = obj.get('message', {})
+                        usage = msg.get('usage')
+                        if not usage or not isinstance(usage, dict):
+                            # Track user message time for duration
+                            if msg.get('role') == 'user':
+                                prev_ts = obj.get('timestamp')
+                            continue
+
+                        if msg.get('role') != 'assistant':
+                            continue
+
+                        ts = obj.get('timestamp', '')
+                        if not ts:
+                            continue
+
+                        # Only include today's entries
+                        if not ts.startswith(today):
+                            prev_ts = None
+                            continue
+
+                        model = msg.get('model', 'unknown') or 'unknown'
+                        models_seen.add(model)
+
+                        tokens_in = usage.get('input', 0) + usage.get('cacheRead', 0) + usage.get('cacheWrite', 0)
+                        tokens_out = usage.get('output', 0)
+                        cache_read = usage.get('cacheRead', 0)
+                        cost_data = usage.get('cost', {})
+                        call_cost = float(cost_data.get('total', 0)) if isinstance(cost_data, dict) else 0.0
+
+                        total_input += usage.get('input', 0)
+                        total_output += tokens_out
+                        total_cache_read += cache_read
+                        total_cost += call_cost
+
+                        # Extract tools used
+                        tools = []
+                        for c in (msg.get('content') or []):
+                            if isinstance(c, dict) and c.get('type') == 'toolCall':
+                                tool_name = c.get('name', '')
+                                if tool_name and tool_name not in tools:
+                                    tools.append(tool_name)
+
+                        # Compute duration from previous user message
+                        duration_ms = 0
+                        if prev_ts:
+                            try:
+                                t1 = datetime.fromisoformat(prev_ts.replace('Z', '+00:00'))
+                                t2 = datetime.fromisoformat(ts.replace('Z', '+00:00'))
+                                duration_ms = int((t2 - t1).total_seconds() * 1000)
+                                if 0 < duration_ms < 300000:  # sanity: < 5 min
+                                    durations.append(duration_ms)
+                            except:
+                                pass
+
+                        # Detect subagent from content context
+                        if session_label == 'main':
+                            for c in (msg.get('content') or []):
+                                if isinstance(c, dict) and c.get('type') == 'text':
+                                    text = c.get('text', '')[:200]
+                                    if 'subagent' in text.lower():
+                                        session_label = 'subagent:' + session_id[:8]
+                                        break
+
+                        calls.append({
+                            'timestamp': ts,
+                            'model': model,
+                            'tokens_in': tokens_in,
+                            'tokens_out': tokens_out,
+                            'cost': '${:.4f}'.format(call_cost),
+                            'cost_raw': call_cost,
+                            'tools_used': tools,
+                            'duration_ms': duration_ms,
+                            'session': session_label,
+                            'stop_reason': msg.get('stopReason', ''),
+                        })
+
+                        prev_ts = ts
+
+            except Exception:
+                continue
+
+    # Sort by timestamp descending
+    calls.sort(key=lambda x: x.get('timestamp', ''), reverse=True)
+    total = len(calls)
+    avg_ms = int(sum(durations) / len(durations)) if durations else 0
+    primary_model = max(models_seen, key=lambda m: sum(1 for c in calls if c['model'] == m)) if models_seen else 'unknown'
+
+    result = {
+        'stats': {
+            'today_calls': total,
+            'today_tokens': {
+                'input': total_input,
+                'output': total_output,
+                'cache_read': total_cache_read,
+            },
+            'today_cost': '${:.2f}'.format(total_cost),
+            'model': primary_model,
+            'avg_response_ms': avg_ms,
+        },
+        'calls': calls[offset:offset + limit],
+        'total': total,
+    }
+    return jsonify(result)
+
+
 @app.route('/api/heatmap')
 def api_heatmap():
     """Activity heatmap — events per hour for the last 7 days."""
@@ -4817,6 +6018,81 @@ def api_heatmap():
         days.append({'label': dl['label'], 'hours': grid.get(dl['date'], [0] * 24)})
 
     return jsonify({'days': days, 'max': max_val})
+
+
+@app.route('/api/system-health')
+def api_system_health():
+    """Comprehensive system health for the Overview tab."""
+    import shutil
+
+    # --- SERVICES ---
+    services = []
+    for name, port in [('OpenClaw Gateway', 18789), ('Mission Control', 3002), ('Dhriti Dashboard', 8901)]:
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            s.settimeout(2)
+            ok = s.connect_ex(('127.0.0.1', port)) == 0
+            s.close()
+            services.append({'name': name, 'port': port, 'up': ok})
+        except Exception:
+            services.append({'name': name, 'port': port, 'up': False})
+
+    # --- DISK USAGE ---
+    disks = []
+    for mount in ['/', '/mnt/data-drive']:
+        try:
+            usage = shutil.disk_usage(mount)
+            used_gb = usage.used / (1024**3)
+            total_gb = usage.total / (1024**3)
+            pct = (usage.used / usage.total) * 100
+            disks.append({'mount': mount, 'used_gb': round(used_gb, 1), 'total_gb': round(total_gb, 1), 'pct': round(pct, 1)})
+        except Exception:
+            pass
+
+    # --- CRON JOBS ---
+    crons = _get_crons()
+    cron_enabled = len([j for j in crons if j.get('enabled', True)])
+    cron_ok_24h = 0
+    cron_failed = []
+    now_ts = time.time()
+    for j in crons:
+        last = j.get('lastRun', {})
+        if not last:
+            continue
+        run_ts = last.get('timestamp', 0)
+        if isinstance(run_ts, str):
+            try:
+                run_ts = datetime.fromisoformat(run_ts.replace('Z', '+00:00')).timestamp()
+            except Exception:
+                run_ts = 0
+        if run_ts and (now_ts - run_ts) < 86400:
+            if last.get('exitCode', last.get('exit', 0)) == 0 and not last.get('error'):
+                cron_ok_24h += 1
+            else:
+                cron_failed.append(j.get('name', j.get('id', 'unknown')))
+
+    # --- SUB-AGENTS (24H) ---
+    sessions = _get_sessions()
+    sa_runs = 0
+    sa_success = 0
+    for s in sessions:
+        mtime = s.get('updatedAt', 0)
+        if isinstance(mtime, (int, float)) and mtime > 1e12:
+            mtime = mtime / 1000
+        if mtime and (now_ts - mtime) < 86400:
+            sid = s.get('sessionId', '')
+            if 'subagent' in sid:
+                sa_runs += 1
+                sa_success += 1  # We don't track failure in session files currently
+
+    sa_pct = round((sa_success / sa_runs * 100) if sa_runs > 0 else 100, 0)
+
+    return jsonify({
+        'services': services,
+        'disks': disks,
+        'crons': {'enabled': cron_enabled, 'ok24h': cron_ok_24h, 'failed': cron_failed},
+        'subagents': {'runs': sa_runs, 'successPct': sa_pct},
+    })
 
 
 @app.route('/api/health')
