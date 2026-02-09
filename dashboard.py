@@ -3681,6 +3681,12 @@ function openCompModal(nodeId) {
   var c = COMP_MAP[nodeId];
   if (!c) return;
   
+  // Clear ALL existing refresh timers to prevent stale data overwriting new modal
+  if (_tgRefreshTimer) { clearInterval(_tgRefreshTimer); _tgRefreshTimer = null; }
+  if (_gwRefreshTimer) { clearInterval(_gwRefreshTimer); _gwRefreshTimer = null; }
+  if (_brainRefreshTimer) { clearInterval(_brainRefreshTimer); _brainRefreshTimer = null; }
+  if (_toolRefreshTimer) { clearInterval(_toolRefreshTimer); _toolRefreshTimer = null; }
+  
   // Track current component for time travel
   window._currentComponentId = nodeId;
   
@@ -4226,7 +4232,10 @@ var _toolCacheAge = {};
 function loadToolData(toolKey, comp, isRefresh) {
   // If we have cached data and this is first open, skip loading spinner
   // The fetch below will update with fresh data
+  var _expectedNodeId = 'node-' + toolKey;
   fetch('/api/component/tool/' + toolKey).then(function(r) { return r.json(); }).then(function(data) {
+    // Guard: don't render if user switched to a different modal
+    if (window._currentComponentId !== _expectedNodeId) return;
     _toolDataCache[toolKey] = data;
     _toolCacheAge[toolKey] = Date.now();
     var body = document.getElementById('comp-modal-body');
