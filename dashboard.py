@@ -4669,6 +4669,18 @@ def api_channels():
             except Exception:
                 continue
 
+    # Filter to channels that actually have data directories (proof of real usage)
+    if configured:
+        active_channels = []
+        oc_dir = os.path.expanduser('~/.openclaw')
+        cb_dir = os.path.expanduser('~/.clawdbot')
+        for ch in configured:
+            # Check for channel-specific directories that indicate real setup
+            if any(os.path.isdir(os.path.join(d, ch)) for d in [oc_dir, cb_dir]):
+                active_channels.append(ch)
+        if active_channels:
+            configured = active_channels
+
     # Fallback: show all if nothing found
     if not configured:
         configured = ['telegram', 'signal', 'whatsapp']
