@@ -3624,10 +3624,33 @@ var COMP_MAP = {
 };
 function initCompClickHandlers() {
   Object.keys(COMP_MAP).forEach(function(id) {
+    // Bind on original flow SVG nodes
     var el = document.getElementById(id);
     if (el) {
       el.classList.add('flow-node-clickable');
       el.addEventListener('click', function(e) {
+        e.stopPropagation();
+        openCompModal(id);
+      });
+    }
+    // Bind on overview clone nodes (ov- prefixed)
+    var ovEl = document.getElementById('ov-' + id);
+    if (ovEl) {
+      ovEl.classList.add('flow-node-clickable');
+      ovEl.addEventListener('click', function(e) {
+        e.stopPropagation();
+        openCompModal(id);
+      });
+    }
+  });
+}
+
+function initOverviewCompClickHandlers() {
+  Object.keys(COMP_MAP).forEach(function(id) {
+    var ovEl = document.getElementById('ov-' + id);
+    if (ovEl) {
+      ovEl.classList.add('flow-node-clickable');
+      ovEl.addEventListener('click', function(e) {
         e.stopPropagation();
         openCompModal(id);
       });
@@ -3771,16 +3794,27 @@ function loadBrainData(isRefresh) {
     html += '<div style="background:var(--bg-secondary);border-radius:10px;padding:12px 14px;text-align:center;"><div style="font-size:24px;font-weight:700;color:var(--text-primary);">' + ((s.avg_response_ms||0) >= 1000 ? ((s.avg_response_ms/1000).toFixed(1)+'s') : ((s.avg_response_ms||0)+'ms')) + '</div><div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;margin-top:2px;">Avg Response</div></div>';
     html += '</div>';
 
+    // Thinking & Cache stats row
+    var thinkCount = s.thinking_calls || 0;
+    var cacheHits = s.cache_hits || 0;
+    var cacheRate = s.today_calls > 0 ? Math.round(cacheHits / s.today_calls * 100) : 0;
+    html += '<div style="display:flex;gap:8px;margin-bottom:12px;justify-content:center;flex-wrap:wrap;">';
+    html += '<span style="background:' + (thinkCount > 0 ? '#7c3aed22' : 'var(--bg-secondary)') + ';color:' + (thinkCount > 0 ? '#7c3aed' : 'var(--text-muted)') + ';padding:3px 10px;border-radius:12px;font-size:11px;font-weight:600;">🧠 Thinking: ' + thinkCount + '/' + (s.today_calls||0) + '</span>';
+    html += '<span style="background:' + (cacheRate > 50 ? '#22c55e22' : 'var(--bg-secondary)') + ';color:' + (cacheRate > 50 ? '#22c55e' : 'var(--text-muted)') + ';padding:3px 10px;border-radius:12px;font-size:11px;font-weight:600;">💾 Cache hit: ' + cacheRate + '%</span>';
+    var cacheW = tok.cache_write||0;
+    html += '<span style="background:var(--bg-secondary);color:var(--text-muted);padding:3px 10px;border-radius:12px;font-size:11px;font-weight:600;">✍️ Cache write: ' + (cacheW>=1e6?(cacheW/1e6).toFixed(1)+'M':cacheW>=1e3?(cacheW/1e3).toFixed(1)+'K':cacheW) + '</span>';
+    html += '</div>';
+
     // Token breakdown bar
     var tIn = tok.input||0, tOut = tok.output||0, tCR = tok.cache_read||0;
     var tTotal = tIn+tOut+tCR || 1;
     html += '<div style="display:flex;height:6px;border-radius:3px;overflow:hidden;margin-bottom:16px;background:var(--bg-secondary);">';
     html += '<div style="width:' + (tIn/tTotal*100) + '%;background:#3b82f6;" title="Input: ' + tIn + '"></div>';
     html += '<div style="width:' + (tOut/tTotal*100) + '%;background:#8b5cf6;" title="Output: ' + tOut + '"></div>';
-    html += '<div style="width:' + (tCR/tTotal*100) + '%;background:#22c55e;" title="Cache: ' + tCR + '"></div>';
+    html += '<div style="width:' + (tCR/tTotal*100) + '%;background:#22c55e;" title="Cache Read: ' + tCR + '"></div>';
     html += '</div>';
     html += '<div style="display:flex;gap:12px;font-size:10px;color:var(--text-muted);margin-bottom:14px;justify-content:center;">';
-    html += '<span>🔵 Input</span><span>🟣 Output</span><span>🟢 Cache</span>';
+    html += '<span>🔵 Input</span><span>🟣 Output</span><span>🟢 Cache Read</span>';
     html += '</div>';
 
     // Call list
@@ -3803,6 +3837,8 @@ function loadBrainData(isRefresh) {
         html += '<span style="color:#8b5cf6;min-width:40px;" title="Out">' + (c.tokens_out>=1000?(c.tokens_out/1000).toFixed(1)+'K':c.tokens_out) + '</span>';
         html += '<span style="color:' + cColor + ';min-width:50px;">' + (c.cost||'$0') + '</span>';
         html += '<span style="color:var(--text-muted);min-width:35px;">' + dur + '</span>';
+        if (c.thinking) html += '<span style="background:#7c3aed22;color:#7c3aed;padding:1px 5px;border-radius:4px;font-size:10px;" title="Thinking enabled">🧠</span>';
+        if (c.cache_read > 0) html += '<span style="background:#22c55e22;color:#22c55e;padding:1px 5px;border-radius:4px;font-size:10px;" title="Cache hit: ' + c.cache_read + ' tokens">💾' + (c.cache_read>=1000?(c.cache_read/1000).toFixed(0)+'K':c.cache_read) + '</span>';
         // Tool badges
         if (c.tools_used && c.tools_used.length > 0) {
           html += '<span style="display:flex;gap:3px;flex-wrap:wrap;">';
@@ -3838,12 +3874,33 @@ function loadGatewayData(isRefresh) {
   fetch('/api/component/gateway?limit=50&offset=' + (_gwPage * 50)).then(function(r) { return r.json(); }).then(function(data) {
     var body = document.getElementById('comp-modal-body');
     var s = data.stats || {};
-    var html = '<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px;">';
-    html += '<div style="flex:1;min-width:80px;background:var(--bg-secondary);border-radius:8px;padding:10px 14px;text-align:center;"><div style="font-size:20px;font-weight:700;color:var(--text-primary);">' + (s.today_messages||0) + '</div><div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;">Messages</div></div>';
-    html += '<div style="flex:1;min-width:80px;background:var(--bg-secondary);border-radius:8px;padding:10px 14px;text-align:center;"><div style="font-size:20px;font-weight:700;color:var(--text-primary);">' + (s.today_heartbeats||0) + '</div><div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;">Heartbeats</div></div>';
-    html += '<div style="flex:1;min-width:80px;background:var(--bg-secondary);border-radius:8px;padding:10px 14px;text-align:center;"><div style="font-size:20px;font-weight:700;color:var(--text-primary);">' + (s.today_crons||0) + '</div><div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;">Cron</div></div>';
-    html += '<div style="flex:1;min-width:80px;background:var(--bg-secondary);border-radius:8px;padding:10px 14px;text-align:center;"><div style="font-size:20px;font-weight:700;color:' + ((s.today_errors||0) > 0 ? 'var(--text-error)' : 'var(--text-primary)') + ';">' + (s.today_errors||0) + '</div><div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;">Errors</div></div>';
+    var cfg = s.config || {};
+
+    // Top stats row
+    var html = '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px;">';
+    html += '<div style="flex:1;min-width:70px;background:var(--bg-secondary);border-radius:8px;padding:10px 12px;text-align:center;"><div style="font-size:20px;font-weight:700;color:var(--text-primary);">' + (s.today_messages||0) + '</div><div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;">Messages</div></div>';
+    html += '<div style="flex:1;min-width:70px;background:var(--bg-secondary);border-radius:8px;padding:10px 12px;text-align:center;"><div style="font-size:20px;font-weight:700;color:var(--text-primary);">' + (s.today_heartbeats||0) + '</div><div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;">Heartbeats</div></div>';
+    html += '<div style="flex:1;min-width:70px;background:var(--bg-secondary);border-radius:8px;padding:10px 12px;text-align:center;"><div style="font-size:20px;font-weight:700;color:var(--text-primary);">' + (s.today_crons||0) + '</div><div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;">Cron</div></div>';
+    html += '<div style="flex:1;min-width:70px;background:var(--bg-secondary);border-radius:8px;padding:10px 12px;text-align:center;"><div style="font-size:20px;font-weight:700;color:' + ((s.today_errors||0) > 0 ? 'var(--text-error)' : 'var(--text-primary)') + ';">' + (s.today_errors||0) + '</div><div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;">Errors</div></div>';
+    html += '<div style="flex:1;min-width:70px;background:var(--bg-secondary);border-radius:8px;padding:10px 12px;text-align:center;"><div style="font-size:20px;font-weight:700;color:#3b82f6;">' + (s.active_sessions||0) + '</div><div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;">Active Sessions</div></div>';
     html += '</div>';
+
+    // Config summary & uptime
+    html += '<div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;">';
+    if (s.uptime) html += '<span style="background:var(--bg-secondary);padding:3px 10px;border-radius:12px;font-size:11px;color:var(--text-muted);">⏱️ Up since: ' + escapeHtml(s.uptime) + '</span>';
+    if (cfg.channels && cfg.channels.length) html += '<span style="background:var(--bg-secondary);padding:3px 10px;border-radius:12px;font-size:11px;color:var(--text-muted);">📡 Channels: ' + cfg.channels.join(', ') + '</span>';
+    if (cfg.heartbeat) html += '<span style="background:var(--bg-secondary);padding:3px 10px;border-radius:12px;font-size:11px;color:var(--text-muted);">💓 Heartbeat: ' + cfg.heartbeat + '</span>';
+    if (cfg.max_concurrent) html += '<span style="background:var(--bg-secondary);padding:3px 10px;border-radius:12px;font-size:11px;color:var(--text-muted);">⚡ Max concurrent: ' + cfg.max_concurrent + '</span>';
+    if (cfg.max_subagents) html += '<span style="background:var(--bg-secondary);padding:3px 10px;border-radius:12px;font-size:11px;color:var(--text-muted);">🐝 Max subagents: ' + cfg.max_subagents + '</span>';
+    html += '</div>';
+
+    // Restart history
+    var restarts = s.restarts || [];
+    if (restarts.length > 0) {
+      html += '<div style="margin-bottom:12px;font-size:11px;color:var(--text-muted);"><strong>🔄 Restarts today:</strong> ';
+      restarts.forEach(function(r) { if(r) html += '<span style="margin-right:8px;">' + new Date(r).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"}) + '</span>'; });
+      html += '</div>';
+    }
 
     var routes = data.routes || [];
     if (routes.length === 0) {
@@ -3898,6 +3955,28 @@ var TOOL_COLORS = {
   'search': '#00695C', 'cron': '#546E7A', 'tts': '#F9A825', 'memory': '#283593'
 };
 
+function _fmtToolTs(ts) {
+  if (!ts) return '';
+  var d = new Date(ts);
+  if (isNaN(d.getTime())) return '';
+  return d.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'});
+}
+function _fmtToolDate(ts) {
+  if (!ts) return '';
+  var d = new Date(ts);
+  if (isNaN(d.getTime())) return '';
+  return d.toLocaleDateString([], {month:'short',day:'numeric'}) + ' ' + d.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
+}
+function _timeAgo(ts) {
+  if (!ts) return '';
+  var secs = (Date.now() - new Date(ts).getTime()) / 1000;
+  if (secs < 0) secs = 0;
+  if (secs < 60) return Math.floor(secs) + 's ago';
+  if (secs < 3600) return Math.floor(secs/60) + 'm ago';
+  if (secs < 86400) return Math.floor(secs/3600) + 'h ago';
+  return Math.floor(secs/86400) + 'd ago';
+}
+
 function loadToolData(toolKey, comp, isRefresh) {
   fetch('/api/component/tool/' + toolKey).then(function(r) { return r.json(); }).then(function(data) {
     var body = document.getElementById('comp-modal-body');
@@ -3906,64 +3985,301 @@ function loadToolData(toolKey, comp, isRefresh) {
     var color = TOOL_COLORS[toolKey] || '#555';
     var html = '';
 
-    // Stats bar
-    html += '<div style="display:flex;gap:12px;padding:10px 16px;background:' + color + '22;border-radius:10px;margin-bottom:14px;align-items:center;flex-wrap:wrap;">';
-    html += '<span style="font-size:13px;font-weight:600;color:' + color + ';">Today: ' + (s.today_calls||0) + ' calls</span>';
-    if (s.today_errors > 0) html += '<span style="font-size:13px;font-weight:600;color:#ef4444;">| ' + s.today_errors + ' errors</span>';
-    html += '</div>';
+    // ─── SESSION MODAL ─────────────────────────────────
+    if (toolKey === 'session') {
+      var agents = data.subagents || [];
+      var active = agents.filter(function(a){return a.status==='active';}).length;
+      var idle = agents.filter(function(a){return a.status==='idle';}).length;
+      var stale = agents.filter(function(a){return a.status==='stale';}).length;
 
-    // Events list
-    html += '<div style="max-height:60vh;overflow-y:auto;">';
-    if (events.length === 0) {
-      html += '<div style="text-align:center;padding:30px;color:var(--text-muted);">No events today</div>';
-    }
-    events.forEach(function(evt) {
-      var ts = evt.timestamp ? new Date(evt.timestamp).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'}) : '';
-      var statusBadge = evt.status === 'error' ? '<span style="color:#ef4444;font-size:11px;margin-left:6px;">✗ error</span>' : '<span style="color:#22c55e;font-size:11px;margin-left:6px;">✓ ok</span>';
-      var durStr = evt.duration_ms ? ' · ' + (evt.duration_ms >= 1000 ? (evt.duration_ms/1000).toFixed(1) + 's' : evt.duration_ms + 'ms') : '';
-
-      html += '<div style="padding:8px 12px;border-bottom:1px solid var(--border);font-size:13px;">';
-      html += '<div style="display:flex;justify-content:space-between;align-items:center;">';
-      html += '<span style="color:var(--text-muted);font-size:11px;font-family:monospace;">' + ts + '</span>';
-      html += statusBadge;
+      html += '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px;">';
+      html += '<div style="background:var(--bg-secondary);border-radius:10px;padding:12px;text-align:center;"><div style="font-size:24px;font-weight:700;color:#22c55e;">' + active + '</div><div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;">Active</div></div>';
+      html += '<div style="background:var(--bg-secondary);border-radius:10px;padding:12px;text-align:center;"><div style="font-size:24px;font-weight:700;color:#f59e0b;">' + idle + '</div><div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;">Idle</div></div>';
+      html += '<div style="background:var(--bg-secondary);border-radius:10px;padding:12px;text-align:center;"><div style="font-size:24px;font-weight:700;color:#ef4444;">' + stale + '</div><div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;">Stale</div></div>';
+      html += '<div style="background:var(--bg-secondary);border-radius:10px;padding:12px;text-align:center;"><div style="font-size:24px;font-weight:700;color:var(--text-primary);">' + (s.today_calls||0) + '</div><div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;">Calls Today</div></div>';
       html += '</div>';
 
-      // Tool-specific rendering
-      if (toolKey === 'session') {
-        var sBadge = evt.session_status === 'running' ? '🟢' : '✅';
-        html += '<div style="margin-top:4px;font-weight:600;">' + sBadge + ' ' + escapeHtml(evt.detail || evt.action || '') + '</div>';
-        if (evt.model) html += '<div style="font-size:11px;color:var(--text-muted);">Model: ' + escapeHtml(evt.model) + (evt.tokens ? ' · ' + evt.tokens + ' tokens' : '') + '</div>';
-      } else if (toolKey === 'exec') {
-        html += '<div style="margin-top:4px;font-family:monospace;font-size:12px;background:var(--bg-secondary);padding:6px 8px;border-radius:6px;word-break:break-all;">' + escapeHtml(evt.detail || '') + '</div>';
-        if (durStr) html += '<div style="font-size:11px;color:var(--text-muted);margin-top:2px;">Duration' + durStr + '</div>';
-      } else if (toolKey === 'browser') {
-        html += '<div style="margin-top:4px;"><span style="background:' + color + '33;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;">' + escapeHtml(evt.action || '') + '</span> ' + escapeHtml(evt.detail || '') + '</div>';
-      } else if (toolKey === 'search') {
-        html += '<div style="margin-top:4px;">🔍 <strong>' + escapeHtml(evt.detail || '') + '</strong></div>';
-        if (evt.result_count !== undefined) html += '<div style="font-size:11px;color:var(--text-muted);">' + evt.result_count + ' results</div>';
-      } else if (toolKey === 'cron') {
-        var cronBadge = evt.status === 'error' ? '❌' : '✅';
-        html += '<div style="margin-top:4px;">' + cronBadge + ' ' + escapeHtml(evt.detail || '') + '</div>';
-      } else if (toolKey === 'tts') {
-        html += '<div style="margin-top:4px;font-style:italic;">"' + escapeHtml((evt.detail || '').substring(0, 100)) + '"</div>';
-        if (evt.voice) html += '<div style="font-size:11px;color:var(--text-muted);">Voice: ' + escapeHtml(evt.voice) + '</div>';
-      } else if (toolKey === 'memory') {
-        var rwBadge = evt.action === 'write' ? '<span style="background:#f59e0b33;color:#f59e0b;padding:1px 6px;border-radius:4px;font-size:10px;font-weight:600;">WRITE</span>' : '<span style="background:#3b82f633;color:#3b82f6;padding:1px 6px;border-radius:4px;font-size:10px;font-weight:600;">READ</span>';
-        html += '<div style="margin-top:4px;">' + rwBadge + ' <code style="font-size:12px;">' + escapeHtml(evt.detail || '') + '</code></div>';
+      if (agents.length > 0) {
+        html += '<div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">Sub-Agents</div>';
+        html += '<div style="display:flex;flex-direction:column;gap:6px;max-height:50vh;overflow-y:auto;">';
+        agents.forEach(function(a) {
+          var dotColor = a.status==='active' ? '#22c55e' : a.status==='idle' ? '#f59e0b' : '#ef4444';
+          var dotShadow = a.status==='active' ? 'box-shadow:0 0 6px rgba(34,197,94,0.6);' : '';
+          html += '<div style="display:flex;align-items:flex-start;gap:10px;padding:10px 12px;background:var(--bg-secondary);border-radius:10px;border:1px solid var(--border-secondary);">';
+          html += '<div style="width:10px;height:10px;border-radius:50%;background:'+dotColor+';margin-top:4px;flex-shrink:0;'+dotShadow+'"></div>';
+          html += '<div style="flex:1;min-width:0;">';
+          html += '<div style="display:flex;justify-content:space-between;align-items:center;">';
+          html += '<span style="font-weight:600;font-size:13px;color:var(--text-primary);">' + escapeHtml(a.displayName || a.id || '?') + '</span>';
+          html += '<span style="font-size:10px;color:var(--text-muted);">' + _timeAgo(a.updatedAt) + '</span>';
+          html += '</div>';
+          if (a.task) html += '<div style="font-size:12px;color:var(--text-secondary);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + escapeHtml(a.task) + '</div>';
+          var meta = [];
+          if (a.model) meta.push(a.model);
+          if (a.tokens) meta.push(a.tokens >= 1000 ? (a.tokens/1000).toFixed(1)+'K tok' : a.tokens+' tok');
+          if (a.channel) meta.push(a.channel);
+          if (meta.length > 0) html += '<div style="font-size:10px;color:var(--text-muted);margin-top:2px;">' + escapeHtml(meta.join(' · ')) + '</div>';
+          if (a.lastMessage) html += '<div style="font-size:11px;color:var(--text-tertiary);margin-top:4px;font-style:italic;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">"' + escapeHtml(a.lastMessage.substring(0,120)) + '"</div>';
+          html += '</div></div>';
+        });
+        html += '</div>';
+      } else if (events.length > 0) {
+        html += '<div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">Recent Session Activity</div>';
+        html += _renderEventList(events, toolKey, color);
       } else {
-        html += '<div style="margin-top:4px;">' + escapeHtml(evt.detail || evt.action || '') + '</div>';
+        html += '<div style="text-align:center;padding:30px;color:var(--text-muted);">No active sub-agents</div>';
       }
+
+    // ─── EXEC MODAL ────────────────────────────────────
+    } else if (toolKey === 'exec') {
+      var running = data.running_commands || [];
+      html += '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px;">';
+      html += '<div style="background:var(--bg-secondary);border-radius:10px;padding:12px;text-align:center;"><div style="font-size:24px;font-weight:700;color:#f59e0b;">' + running.length + '</div><div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;">Running</div></div>';
+      html += '<div style="background:var(--bg-secondary);border-radius:10px;padding:12px;text-align:center;"><div style="font-size:24px;font-weight:700;color:var(--text-primary);">' + (s.today_calls||0) + '</div><div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;">Total Today</div></div>';
+      html += '<div style="background:var(--bg-secondary);border-radius:10px;padding:12px;text-align:center;"><div style="font-size:24px;font-weight:700;color:'+ ((s.today_errors||0)>0?'#ef4444':'var(--text-primary)') +';">' + (s.today_errors||0) + '</div><div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;">Errors</div></div>';
       html += '</div>';
-    });
-    html += '</div>';
+
+      if (running.length > 0) {
+        html += '<div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">⚡ Running Now</div>';
+        running.forEach(function(cmd) {
+          html += '<div style="padding:8px 12px;background:#E6510011;border:1px solid #E6510033;border-radius:8px;margin-bottom:6px;font-family:monospace;font-size:12px;">';
+          html += '<div style="display:flex;justify-content:space-between;"><span style="color:var(--text-primary);font-weight:600;">$ ' + escapeHtml((cmd.command||'').substring(0,120)) + '</span>';
+          html += '<span class="pulse" style="width:8px;height:8px;"></span></div>';
+          if (cmd.pid) html += '<span style="font-size:10px;color:var(--text-muted);">PID: ' + cmd.pid + '</span>';
+          html += '</div>';
+        });
+      }
+
+      if (events.length > 0) {
+        html += '<div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin:12px 0 8px;">Recent Commands</div>';
+        html += '<div style="max-height:45vh;overflow-y:auto;display:flex;flex-direction:column;gap:4px;">';
+        events.forEach(function(evt) {
+          var ts = _fmtToolTs(evt.timestamp);
+          var isErr = evt.status === 'error';
+          var borderColor = isErr ? '#ef444433' : 'var(--border-secondary)';
+          html += '<div style="padding:6px 10px;background:var(--bg-secondary);border:1px solid '+borderColor+';border-radius:6px;">';
+          html += '<div style="display:flex;justify-content:space-between;align-items:center;">';
+          html += '<code style="font-size:11px;color:var(--text-secondary);word-break:break-all;">$ ' + escapeHtml((evt.detail||'').substring(0,150)) + '</code>';
+          html += '<span style="font-size:10px;color:var(--text-muted);white-space:nowrap;margin-left:8px;">' + ts + '</span>';
+          html += '</div>';
+          var meta = [];
+          if (evt.duration_ms) meta.push(evt.duration_ms >= 1000 ? (evt.duration_ms/1000).toFixed(1)+'s' : evt.duration_ms+'ms');
+          if (isErr) meta.push('<span style="color:#ef4444;">✗ error</span>');
+          if (meta.length) html += '<div style="font-size:10px;color:var(--text-muted);margin-top:2px;">' + meta.join(' · ') + '</div>';
+          html += '</div>';
+        });
+        html += '</div>';
+      } else {
+        html += '<div style="text-align:center;padding:20px;color:var(--text-muted);">No exec commands today</div>';
+      }
+
+    // ─── BROWSER/WEB MODAL ─────────────────────────────
+    } else if (toolKey === 'browser') {
+      var urls = data.recent_urls || [];
+      html += '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px;">';
+      html += '<div style="background:var(--bg-secondary);border-radius:10px;padding:12px;text-align:center;"><div style="font-size:24px;font-weight:700;color:var(--text-primary);">' + (s.today_calls||0) + '</div><div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;">Actions Today</div></div>';
+      html += '<div style="background:var(--bg-secondary);border-radius:10px;padding:12px;text-align:center;"><div style="font-size:24px;font-weight:700;color:#6A1B9A;">' + urls.length + '</div><div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;">URLs Visited</div></div>';
+      html += '<div style="background:var(--bg-secondary);border-radius:10px;padding:12px;text-align:center;"><div style="font-size:24px;font-weight:700;color:'+ ((s.today_errors||0)>0?'#ef4444':'var(--text-primary)') +';">' + (s.today_errors||0) + '</div><div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;">Errors</div></div>';
+      html += '</div>';
+
+      if (urls.length > 0) {
+        html += '<div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">🌐 Recent URLs</div>';
+        html += '<div style="display:flex;flex-direction:column;gap:4px;margin-bottom:14px;">';
+        urls.forEach(function(u) {
+          html += '<div style="padding:6px 10px;background:var(--bg-secondary);border-radius:6px;display:flex;align-items:center;gap:8px;">';
+          html += '<span style="font-size:14px;">🔗</span>';
+          html += '<a href="' + escapeHtml(u.url||'') + '" target="_blank" style="font-size:12px;color:var(--text-link);text-decoration:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;">' + escapeHtml((u.url||'').substring(0,80)) + '</a>';
+          html += '<span style="font-size:10px;color:var(--text-muted);white-space:nowrap;">' + _timeAgo(u.timestamp) + '</span>';
+          html += '</div>';
+        });
+        html += '</div>';
+      }
+
+      if (events.length > 0) {
+        html += '<div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">Action Log</div>';
+        html += '<div style="max-height:40vh;overflow-y:auto;display:flex;flex-direction:column;gap:4px;">';
+        events.forEach(function(evt) {
+          var ts = _fmtToolTs(evt.timestamp);
+          var actionColors = {snapshot:'#3b82f6',navigate:'#8b5cf6',click:'#f59e0b',type:'#22c55e',screenshot:'#ec4899',open:'#06b6d4',act:'#f97316'};
+          var ac = evt.action || 'unknown';
+          var acColor = actionColors[ac] || '#6b7280';
+          html += '<div style="padding:6px 10px;background:var(--bg-secondary);border-radius:6px;display:flex;align-items:center;gap:8px;font-size:12px;">';
+          html += '<span style="background:'+acColor+'22;color:'+acColor+';padding:1px 8px;border-radius:4px;font-size:10px;font-weight:600;min-width:60px;text-align:center;">' + escapeHtml(ac) + '</span>';
+          html += '<span style="color:var(--text-secondary);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + escapeHtml((evt.detail||'').substring(0,100)) + '</span>';
+          html += '<span style="color:var(--text-muted);font-size:10px;white-space:nowrap;">' + ts + '</span>';
+          html += '</div>';
+        });
+        html += '</div>';
+      } else {
+        html += '<div style="text-align:center;padding:20px;color:var(--text-muted);">No browser actions today</div>';
+      }
+
+    // ─── SEARCH MODAL ──────────────────────────────────
+    } else if (toolKey === 'search') {
+      html += '<div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:16px;">';
+      html += '<div style="background:var(--bg-secondary);border-radius:10px;padding:12px;text-align:center;"><div style="font-size:24px;font-weight:700;color:var(--text-primary);">' + (s.today_calls||0) + '</div><div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;">Searches Today</div></div>';
+      html += '<div style="background:var(--bg-secondary);border-radius:10px;padding:12px;text-align:center;"><div style="font-size:24px;font-weight:700;color:'+ ((s.today_errors||0)>0?'#ef4444':'var(--text-primary)') +';">' + (s.today_errors||0) + '</div><div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;">Errors</div></div>';
+      html += '</div>';
+
+      if (events.length > 0) {
+        html += '<div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">Recent Searches</div>';
+        html += '<div style="max-height:55vh;overflow-y:auto;display:flex;flex-direction:column;gap:6px;">';
+        events.forEach(function(evt) {
+          var ts = _fmtToolTs(evt.timestamp);
+          html += '<div style="padding:10px 12px;background:var(--bg-secondary);border-radius:8px;border:1px solid var(--border-secondary);">';
+          html += '<div style="display:flex;justify-content:space-between;align-items:flex-start;">';
+          html += '<div style="font-size:14px;font-weight:600;color:var(--text-primary);">🔍 ' + escapeHtml(evt.detail || '') + '</div>';
+          html += '<span style="font-size:10px;color:var(--text-muted);white-space:nowrap;margin-left:8px;">' + ts + '</span>';
+          html += '</div>';
+          if (evt.result_count !== undefined) html += '<div style="font-size:11px;color:var(--text-muted);margin-top:4px;">' + evt.result_count + ' results returned</div>';
+          if (evt.status === 'error') html += '<div style="font-size:11px;color:#ef4444;margin-top:2px;">✗ Error</div>';
+          html += '</div>';
+        });
+        html += '</div>';
+      } else {
+        html += '<div style="text-align:center;padding:30px;color:var(--text-muted);">No searches today</div>';
+      }
+
+    // ─── CRON MODAL ────────────────────────────────────
+    } else if (toolKey === 'cron') {
+      var jobs = data.cron_jobs || [];
+      html += '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px;">';
+      html += '<div style="background:var(--bg-secondary);border-radius:10px;padding:12px;text-align:center;"><div style="font-size:24px;font-weight:700;color:var(--text-primary);">' + jobs.length + '</div><div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;">Cron Jobs</div></div>';
+      var cronOk = jobs.filter(function(j){return j.lastStatus!=='error';}).length;
+      var cronErr = jobs.filter(function(j){return j.lastStatus==='error';}).length;
+      html += '<div style="background:var(--bg-secondary);border-radius:10px;padding:12px;text-align:center;"><div style="font-size:24px;font-weight:700;color:#22c55e;">' + cronOk + '</div><div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;">Healthy</div></div>';
+      html += '<div style="background:var(--bg-secondary);border-radius:10px;padding:12px;text-align:center;"><div style="font-size:24px;font-weight:700;color:'+(cronErr>0?'#ef4444':'var(--text-primary)')+';">' + cronErr + '</div><div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;">Errors</div></div>';
+      html += '</div>';
+
+      if (jobs.length > 0) {
+        html += '<div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">Scheduled Jobs</div>';
+        html += '<div style="display:flex;flex-direction:column;gap:6px;max-height:55vh;overflow-y:auto;">';
+        jobs.forEach(function(j) {
+          var isErr = j.lastStatus === 'error';
+          var borderLeft = isErr ? '3px solid #ef4444' : '3px solid #22c55e';
+          html += '<div style="padding:10px 14px;background:var(--bg-secondary);border-radius:8px;border-left:'+borderLeft+';border:1px solid var(--border-secondary);border-left:'+borderLeft+';">';
+          html += '<div style="display:flex;justify-content:space-between;align-items:center;">';
+          html += '<span style="font-weight:600;font-size:13px;color:var(--text-primary);">' + escapeHtml(j.name || j.task || j.id || '?') + '</span>';
+          html += '<span style="padding:2px 8px;border-radius:4px;font-size:10px;font-weight:600;background:' + (isErr ? 'var(--bg-error);color:#ef4444' : 'var(--bg-success);color:#22c55e') + ';">' + (isErr ? 'ERROR' : 'OK') + '</span>';
+          html += '</div>';
+          var exprStr = typeof j.expr === 'object' ? (j.expr.expr || j.expr.at || ('every ' + Math.round((j.expr.everyMs||0)/60000) + 'm') || JSON.stringify(j.expr)) : (j.expr || j.schedule || '');
+          html += '<div style="font-family:monospace;font-size:11px;color:var(--text-accent);margin-top:4px;">' + escapeHtml(exprStr) + '</div>';
+          var meta = [];
+          if (j.lastRun) meta.push('Last: ' + _fmtToolDate(j.lastRun));
+          if (j.nextRun) meta.push('Next: ' + _fmtToolDate(j.nextRun));
+          if (j.channel) meta.push('→ ' + j.channel);
+          if (meta.length) html += '<div style="font-size:10px;color:var(--text-muted);margin-top:4px;">' + escapeHtml(meta.join(' · ')) + '</div>';
+          if (isErr && j.lastError) html += '<div style="font-size:11px;color:#ef4444;margin-top:4px;background:#ef444411;padding:4px 8px;border-radius:4px;">' + escapeHtml((j.lastError||'').substring(0,200)) + '</div>';
+          html += '</div>';
+        });
+        html += '</div>';
+      } else if (events.length > 0) {
+        html += '<div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">Recent Cron Activity</div>';
+        html += _renderEventList(events, toolKey, color);
+      } else {
+        html += '<div style="text-align:center;padding:30px;color:var(--text-muted);">No cron jobs configured</div>';
+      }
+
+    // ─── TTS MODAL ─────────────────────────────────────
+    } else if (toolKey === 'tts') {
+      html += '<div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:16px;">';
+      html += '<div style="background:var(--bg-secondary);border-radius:10px;padding:12px;text-align:center;"><div style="font-size:24px;font-weight:700;color:var(--text-primary);">' + (s.today_calls||0) + '</div><div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;">Generations Today</div></div>';
+      html += '<div style="background:var(--bg-secondary);border-radius:10px;padding:12px;text-align:center;"><div style="font-size:24px;font-weight:700;color:'+ ((s.today_errors||0)>0?'#ef4444':'var(--text-primary)') +';">' + (s.today_errors||0) + '</div><div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;">Errors</div></div>';
+      html += '</div>';
+
+      if (events.length > 0) {
+        html += '<div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">Recent TTS Generations</div>';
+        html += '<div style="max-height:55vh;overflow-y:auto;display:flex;flex-direction:column;gap:6px;">';
+        events.forEach(function(evt) {
+          var ts = _fmtToolTs(evt.timestamp);
+          html += '<div style="padding:10px 12px;background:var(--bg-secondary);border-radius:8px;border-left:3px solid #F9A825;">';
+          html += '<div style="display:flex;justify-content:space-between;align-items:center;">';
+          html += '<span style="font-size:14px;">🔊</span>';
+          html += '<span style="font-size:10px;color:var(--text-muted);">' + ts + '</span>';
+          html += '</div>';
+          html += '<div style="font-size:13px;color:var(--text-secondary);margin-top:6px;font-style:italic;line-height:1.4;">"' + escapeHtml((evt.detail || '').substring(0, 200)) + '"</div>';
+          if (evt.voice) html += '<div style="font-size:10px;color:var(--text-muted);margin-top:4px;">🎤 Voice: ' + escapeHtml(evt.voice) + '</div>';
+          if (evt.duration_ms) html += '<span style="font-size:10px;color:var(--text-muted);">' + (evt.duration_ms>=1000?(evt.duration_ms/1000).toFixed(1)+'s':evt.duration_ms+'ms') + '</span>';
+          html += '</div>';
+        });
+        html += '</div>';
+      } else {
+        html += '<div style="text-align:center;padding:30px;color:var(--text-muted);">No TTS generations today</div>';
+      }
+
+    // ─── MEMORY MODAL ──────────────────────────────────
+    } else if (toolKey === 'memory') {
+      var files = data.memory_files || [];
+      var reads = events.filter(function(e){return e.action!=='write';}).length;
+      var writes = events.filter(function(e){return e.action==='write';}).length;
+      html += '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px;">';
+      html += '<div style="background:var(--bg-secondary);border-radius:10px;padding:12px;text-align:center;"><div style="font-size:24px;font-weight:700;color:#3b82f6;">' + reads + '</div><div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;">Reads</div></div>';
+      html += '<div style="background:var(--bg-secondary);border-radius:10px;padding:12px;text-align:center;"><div style="font-size:24px;font-weight:700;color:#f59e0b;">' + writes + '</div><div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;">Writes</div></div>';
+      html += '<div style="background:var(--bg-secondary);border-radius:10px;padding:12px;text-align:center;"><div style="font-size:24px;font-weight:700;color:var(--text-primary);">' + files.length + '</div><div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;">Files</div></div>';
+      html += '</div>';
+
+      if (files.length > 0) {
+        html += '<div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">Workspace Files</div>';
+        html += '<div style="display:flex;flex-direction:column;gap:3px;margin-bottom:14px;">';
+        files.forEach(function(f) {
+          var sizeStr = f.size >= 1024 ? (f.size/1024).toFixed(1)+'KB' : f.size+'B';
+          html += '<div style="padding:6px 10px;background:var(--bg-secondary);border-radius:6px;display:flex;align-items:center;gap:8px;font-size:12px;">';
+          html += '<span style="font-size:14px;">📄</span>';
+          html += '<span style="color:var(--text-link);font-family:monospace;flex:1;">' + escapeHtml(f.path) + '</span>';
+          html += '<span style="color:var(--text-muted);font-size:11px;">' + sizeStr + '</span>';
+          html += '</div>';
+        });
+        html += '</div>';
+      }
+
+      if (events.length > 0) {
+        html += '<div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">Recent File Operations</div>';
+        html += '<div style="max-height:40vh;overflow-y:auto;display:flex;flex-direction:column;gap:4px;">';
+        events.forEach(function(evt) {
+          var ts = _fmtToolTs(evt.timestamp);
+          var isWrite = evt.action === 'write';
+          var badge = isWrite ? '<span style="background:#f59e0b33;color:#f59e0b;padding:1px 6px;border-radius:4px;font-size:10px;font-weight:600;">WRITE</span>' : '<span style="background:#3b82f633;color:#3b82f6;padding:1px 6px;border-radius:4px;font-size:10px;font-weight:600;">READ</span>';
+          html += '<div style="padding:6px 10px;background:var(--bg-secondary);border-radius:6px;display:flex;align-items:center;gap:8px;font-size:12px;">';
+          html += badge;
+          html += '<code style="color:var(--text-secondary);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + escapeHtml(evt.detail || '') + '</code>';
+          html += '<span style="color:var(--text-muted);font-size:10px;white-space:nowrap;">' + ts + '</span>';
+          html += '</div>';
+        });
+        html += '</div>';
+      } else {
+        html += '<div style="text-align:center;padding:20px;color:var(--text-muted);">No file operations today</div>';
+      }
+
+    // ─── FALLBACK ──────────────────────────────────────
+    } else {
+      html += '<div style="display:flex;gap:12px;padding:10px 16px;background:' + color + '22;border-radius:10px;margin-bottom:14px;align-items:center;flex-wrap:wrap;">';
+      html += '<span style="font-size:13px;font-weight:600;color:' + color + ';">Today: ' + (s.today_calls||0) + ' calls</span>';
+      if (s.today_errors > 0) html += '<span style="font-size:13px;font-weight:600;color:#ef4444;">| ' + s.today_errors + ' errors</span>';
+      html += '</div>';
+      html += _renderEventList(events, toolKey, color);
+    }
 
     body.innerHTML = html;
-    document.getElementById('comp-modal-footer').textContent = 'Last updated: ' + new Date().toLocaleTimeString() + ' · ' + (data.total||0) + ' total events';
+    document.getElementById('comp-modal-footer').textContent = 'Auto-refreshing · Last updated: ' + new Date().toLocaleTimeString() + ' · ' + (data.total||0) + ' events today';
   }).catch(function(e) {
     if (!isRefresh) {
       document.getElementById('comp-modal-body').innerHTML = '<div style="text-align:center;padding:20px;color:var(--text-error);">Failed to load data: ' + e + '</div>';
     }
   });
+}
+
+function _renderEventList(events, toolKey, color) {
+  if (events.length === 0) return '<div style="text-align:center;padding:30px;color:var(--text-muted);">No events today</div>';
+  var html = '<div style="max-height:50vh;overflow-y:auto;display:flex;flex-direction:column;gap:4px;">';
+  events.forEach(function(evt) {
+    var ts = _fmtToolTs(evt.timestamp);
+    var isErr = evt.status === 'error';
+    html += '<div style="padding:6px 10px;background:var(--bg-secondary);border-radius:6px;border:1px solid '+(isErr?'#ef444433':'var(--border-secondary)')+';font-size:12px;">';
+    html += '<div style="display:flex;justify-content:space-between;"><span style="color:var(--text-secondary);">' + escapeHtml(evt.detail||evt.action||'') + '</span>';
+    html += '<span style="color:var(--text-muted);font-size:10px;">' + ts + '</span></div>';
+    html += '</div>';
+  });
+  html += '</div>';
+  return html;
 }
 
 function closeCompModal() {
@@ -4150,6 +4466,7 @@ document.addEventListener('DOMContentLoaded', function() {
   initZoom();
   // Overview is the default tab
   initOverviewFlow();
+  initOverviewCompClickHandlers();
   initFlow();
   loadAll();
   startOverviewTasksRefresh();
@@ -4221,34 +4538,75 @@ def api_mc_tasks():
 
 @app.route('/api/channels')
 def api_channels():
-    """Return list of configured channel names (telegram, signal, whatsapp, etc.)."""
+    """Return list of configured channel names (telegram, signal, whatsapp, discord, webchat, etc.)."""
+    KNOWN_CHANNELS = ('telegram', 'signal', 'whatsapp', 'discord', 'webchat')
     configured = []
-    # Check multiple config files for channel/plugin definitions
-    config_files = [
-        os.path.expanduser('~/.clawdbot/openclaw.json'),
-        os.path.expanduser('~/.clawdbot/clawdbot.json'),
-        os.path.expanduser('~/.clawdbot/moltbot.json'),
+
+    def _add(name):
+        n = name.lower()
+        if n in KNOWN_CHANNELS and n not in configured:
+            configured.append(n)
+
+    # 1. Check gateway.yaml / gateway.yml (OpenClaw gateway config)
+    yaml_candidates = [
+        os.path.expanduser('~/.openclaw/gateway.yaml'),
+        os.path.expanduser('~/.openclaw/gateway.yml'),
+        os.path.expanduser('~/.clawdbot/gateway.yaml'),
+        os.path.expanduser('~/.clawdbot/gateway.yml'),
     ]
-    for cf in config_files:
+    for yf in yaml_candidates:
         try:
-            with open(cf) as f:
-                data = json.load(f)
-            # Check plugins.entries for enabled channels
-            plugins = data.get('plugins', {}).get('entries', {})
-            for name, pconf in plugins.items():
-                if pconf.get('enabled') and name.lower() in ('telegram', 'signal', 'whatsapp'):
-                    if name.lower() not in configured:
-                        configured.append(name.lower())
-            # Also check channels key for configured channels
-            channels = data.get('channels', {})
-            for name in channels:
-                if name.lower() in ('telegram', 'signal', 'whatsapp'):
-                    if name.lower() not in configured:
-                        configured.append(name.lower())
+            import yaml as _yaml
+            with open(yf) as f:
+                ydata = _yaml.safe_load(f)
+            if not isinstance(ydata, dict):
+                continue
+            # channels: or plugins: section
+            for section_key in ('channels', 'plugins'):
+                section = ydata.get(section_key, {})
+                if isinstance(section, dict):
+                    for name, conf in section.items():
+                        if isinstance(conf, dict) and conf.get('enabled', True):
+                            _add(name)
+                        elif isinstance(conf, bool) and conf:
+                            _add(name)
+                elif isinstance(section, list):
+                    for name in section:
+                        _add(str(name))
             if configured:
-                break  # Use first config that has data
+                break
         except Exception:
             continue
+
+    # 2. Check JSON config files (clawdbot/openclaw/moltbot)
+    if not configured:
+        config_files = [
+            os.path.expanduser('~/.clawdbot/openclaw.json'),
+            os.path.expanduser('~/.clawdbot/clawdbot.json'),
+            os.path.expanduser('~/.clawdbot/moltbot.json'),
+        ]
+        for cf in config_files:
+            try:
+                with open(cf) as f:
+                    data = json.load(f)
+                # Check plugins.entries for enabled channels
+                plugins = data.get('plugins', {}).get('entries', {})
+                for name, pconf in plugins.items():
+                    if isinstance(pconf, dict) and pconf.get('enabled'):
+                        _add(name)
+                # Also check channels key
+                channels = data.get('channels', {})
+                if isinstance(channels, dict):
+                    for name in channels:
+                        _add(name)
+                elif isinstance(channels, list):
+                    for name in channels:
+                        _add(str(name))
+                if configured:
+                    break
+            except Exception:
+                continue
+
     # Fallback: show all if nothing found
     if not configured:
         configured = ['telegram', 'signal', 'whatsapp']
@@ -4375,16 +4733,80 @@ def _find_log_file(ds):
                 return f
     return None
 
+@app.route('/api/timeline')
+def api_timeline():
+    """Return available dates with activity counts for time travel."""
+    now = datetime.now()
+    days = []
+    for i in range(30, -1, -1):
+        d = now - timedelta(days=i)
+        ds = d.strftime('%Y-%m-%d')
+        log_file = _find_log_file(ds)
+        count = 0
+        hours = {}
+        if log_file:
+            try:
+                with open(log_file) as f:
+                    for line in f:
+                        count += 1
+                        try:
+                            obj = json.loads(line.strip())
+                            ts = obj.get('time') or ''
+                            if 'T' in ts:
+                                h = int(ts.split('T')[1][:2])
+                                hours[h] = hours.get(h, 0) + 1
+                        except Exception:
+                            pass
+            except Exception:
+                pass
+        # Also check memory files for that date
+        mem_file = os.path.join(MEMORY_DIR, f'{ds}.md') if MEMORY_DIR else None
+        has_memory = mem_file and os.path.exists(mem_file)
+        if count > 0 or has_memory:
+            days.append({
+                'date': ds,
+                'label': d.strftime('%a %b %d'),
+                'events': count,
+                'hasMemory': has_memory,
+                'hours': hours,
+            })
+    return jsonify({'days': days, 'today': now.strftime('%Y-%m-%d')})
+
+
 @app.route('/api/logs')
 def api_logs():
     lines_count = int(request.args.get('lines', 100))
-    today = datetime.now().strftime('%Y-%m-%d')
-    log_file = _find_log_file(today)
+    date_str = request.args.get('date', datetime.now().strftime('%Y-%m-%d'))
+    hour_start = request.args.get('hour_start', None)
+    hour_end = request.args.get('hour_end', None)
+    log_file = _find_log_file(date_str)
     lines = []
     if log_file:
-        result = subprocess.run(['tail', f'-{lines_count}', log_file], capture_output=True, text=True)
-        lines = result.stdout.strip().split('\n') if result.stdout.strip() else []
-    return jsonify({'lines': lines})
+        if hour_start is not None or hour_end is not None:
+            # Time-filtered reading
+            h_start = int(hour_start) if hour_start is not None else 0
+            h_end = int(hour_end) if hour_end is not None else 23
+            try:
+                with open(log_file) as f:
+                    for line in f:
+                        try:
+                            obj = json.loads(line.strip())
+                            ts = obj.get('time') or ''
+                            if 'T' in ts:
+                                hour = int(ts.split('T')[1][:2])
+                                if h_start <= hour <= h_end:
+                                    lines.append(line.strip())
+                            else:
+                                lines.append(line.strip())
+                        except (json.JSONDecodeError, ValueError):
+                            lines.append(line.strip())
+                lines = lines[-lines_count:]
+            except Exception:
+                pass
+        else:
+            result = subprocess.run(['tail', f'-{lines_count}', log_file], capture_output=True, text=True)
+            lines = result.stdout.strip().split('\n') if result.stdout.strip() else []
+    return jsonify({'lines': lines, 'date': date_str})
 
 
 @app.route('/api/logs-stream')
@@ -5453,11 +5875,18 @@ def api_channel_telegram():
                                             txt = c.get('text', '')
                                             # Skip system/heartbeat messages
                                             if txt and not txt.startswith('System:') and 'HEARTBEAT' not in txt:
-                                                msg['text'] = txt[:200]
+                                                msg['text'] = txt[:300]
+                                                # Extract real sender from [Telegram Name id:...] pattern
+                                                tg_name = re.search(r'\[Telegram\s+(.+?)\s+id:', txt)
+                                                if tg_name:
+                                                    msg['sender'] = tg_name.group(1)
                                                 break
                                 elif isinstance(content, str) and content:
                                     if not content.startswith('System:') and 'HEARTBEAT' not in content:
-                                        msg['text'] = content[:200]
+                                        msg['text'] = content[:300]
+                                        tg_name = re.search(r'\[Telegram\s+(.+?)\s+id:', content)
+                                        if tg_name:
+                                            msg['sender'] = tg_name.group(1)
                                 if msg['text']:
                                     break
                 except Exception:
@@ -5514,11 +5943,15 @@ def api_channel_telegram():
                             continue
                         direction = 'in' if role == 'user' else 'out'
                         sender = 'User' if role == 'user' else 'Clawd'
+                        if direction == 'in':
+                            tg_name = re.search(r'\[Telegram\s+(.+?)\s+id:', txt)
+                            if tg_name:
+                                sender = tg_name.group(1)
                         messages.append({
                             'timestamp': ts,
                             'direction': direction,
                             'sender': sender,
-                            'text': txt[:200],
+                            'text': txt[:300],
                             'chatId': chat_id,
                             'sessionId': uuid,
                         })
@@ -5709,12 +6142,84 @@ def api_component_tool(name):
     events.sort(key=lambda e: e.get('timestamp', ''), reverse=True)
     events = events[:50]
 
-    return jsonify({
+    result = {
         'name': name,
         'stats': {'today_calls': today_calls, 'today_errors': today_errors},
         'events': events,
         'total': today_calls,
-    })
+    }
+
+    # Enrich with tool-specific data
+    if name == 'session':
+        # Add live sub-agent data
+        try:
+            sa_data = api_subagents().get_json()
+            result['subagents'] = sa_data.get('subagents', [])
+        except Exception:
+            result['subagents'] = []
+
+    elif name == 'exec':
+        # Check for running background processes
+        running = []
+        try:
+            proc_dir = os.path.expanduser('~/.openclaw/processes')
+            if not os.path.isdir(proc_dir):
+                proc_dir = os.path.expanduser('~/.clawdbot/processes')
+            if os.path.isdir(proc_dir):
+                for pf in os.listdir(proc_dir):
+                    try:
+                        with open(os.path.join(proc_dir, pf)) as pfile:
+                            pdata = json.load(pfile)
+                            if pdata.get('running', False):
+                                running.append({
+                                    'command': pdata.get('command', '?'),
+                                    'pid': pdata.get('pid', ''),
+                                })
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+        result['running_commands'] = running
+
+    elif name == 'browser':
+        # Extract unique URLs from events
+        seen = set()
+        urls = []
+        for evt in events:
+            url = evt.get('detail', '')
+            if url.startswith('http') and url not in seen:
+                seen.add(url)
+                urls.append({'url': url, 'timestamp': evt.get('timestamp', '')})
+        result['recent_urls'] = urls[:20]
+
+    elif name == 'cron':
+        # Add full cron job list
+        try:
+            crons = _get_crons()
+            result['cron_jobs'] = []
+            for cj in crons:
+                result['cron_jobs'].append({
+                    'id': cj.get('id', ''),
+                    'name': cj.get('name') or cj.get('task') or cj.get('id', '?'),
+                    'expr': (cj['expr'].get('expr', str(cj['expr'])) if isinstance(cj.get('expr'), dict) else cj.get('expr') or cj.get('schedule', '')),
+                    'task': cj.get('task') or cj.get('command', ''),
+                    'channel': cj.get('channel', ''),
+                    'lastRun': cj.get('lastRun') or cj.get('lastRunAt', ''),
+                    'nextRun': cj.get('nextRun') or cj.get('nextRunAt', ''),
+                    'lastStatus': cj.get('lastStatus', 'ok'),
+                    'lastError': cj.get('lastError', ''),
+                })
+        except Exception:
+            result['cron_jobs'] = []
+
+    elif name == 'memory':
+        # Add workspace file listing
+        try:
+            result['memory_files'] = _get_memory_files()
+        except Exception:
+            result['memory_files'] = []
+
+    return jsonify(result)
 
 
 @app.route('/api/component/gateway')
@@ -5805,6 +6310,82 @@ def api_component_gateway():
     routes.sort(key=lambda x: x.get('timestamp', ''), reverse=True)
     total = len(routes)
     page = routes[offset:offset + limit]
+
+    # --- Enhanced: active sessions, config summary, uptime, restart history ---
+    import re as _re
+
+    # Active sessions
+    active_sessions = 0
+    try:
+        sess_file = os.path.join(SESSIONS_DIR or os.path.expanduser('~/.clawdbot/agents/main/sessions'), 'sessions.json')
+        with open(sess_file) as f:
+            sess_data = json.load(f)
+        now_ts = time.time() * 1000  # ms
+        for sid, sinfo in sess_data.items():
+            updated = sinfo.get('updatedAt', 0)
+            if now_ts - updated < 3600_000:  # active in last hour
+                active_sessions += 1
+    except Exception:
+        pass
+
+    # Config summary
+    config_summary = {}
+    for cf in [os.path.expanduser('~/.clawdbot/openclaw.json'), os.path.expanduser('~/.openclaw/openclaw.json')]:
+        try:
+            with open(cf) as f:
+                cfg = json.load(f)
+            plugins = cfg.get('plugins', {}).get('entries', {})
+            config_summary['channels'] = [k for k, v in plugins.items() if v.get('enabled')]
+            ad = cfg.get('agents', {}).get('defaults', {})
+            config_summary['max_concurrent'] = ad.get('maxConcurrent', '?')
+            config_summary['max_subagents'] = ad.get('subagents', {}).get('maxConcurrent', '?')
+            hb = ad.get('heartbeat', {})
+            config_summary['heartbeat'] = hb.get('every', '?')
+            config_summary['workspace'] = ad.get('workspace', '?')
+            break
+        except Exception:
+            continue
+
+    # Gateway uptime (from systemd)
+    uptime_str = ''
+    try:
+        r = subprocess.run(['systemctl', '--user', 'show', 'openclaw-gateway', '--property=ActiveEnterTimestamp'],
+                          capture_output=True, text=True, timeout=3)
+        ts_line = r.stdout.strip()
+        if '=' in ts_line:
+            uptime_str = ts_line.split('=', 1)[1].strip()
+    except Exception:
+        pass
+    if not uptime_str:
+        try:
+            r = subprocess.run(['pgrep', '-a', 'openclaw'], capture_output=True, text=True, timeout=3)
+            if r.stdout.strip():
+                pid = r.stdout.strip().split()[0]
+                r2 = subprocess.run(['ps', '-o', 'etime=', '-p', pid], capture_output=True, text=True, timeout=3)
+                uptime_str = r2.stdout.strip()
+        except Exception:
+            pass
+
+    # Restart history from log (look for "gateway start" or "listening" entries)
+    restarts = []
+    if log_path:
+        try:
+            r = subprocess.run(['grep', '-i', 'gateway.*start\\|listening on\\|server started', log_path],
+                              capture_output=True, text=True, timeout=5)
+            for line in r.stdout.splitlines()[-5:]:  # last 5 restarts
+                try:
+                    obj = json.loads(line.strip())
+                    restarts.append(obj.get('time', ''))
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+    stats['active_sessions'] = active_sessions
+    stats['config'] = config_summary
+    stats['uptime'] = uptime_str
+    stats['restarts'] = restarts
+
     return jsonify({'routes': page, 'stats': stats, 'total': total})
 
 
@@ -5899,6 +6480,13 @@ def api_component_brain():
                         total_cache_read += cache_read
                         total_cost += call_cost
 
+                        # Detect thinking blocks
+                        has_thinking = False
+                        for c in (msg.get('content') or []):
+                            if isinstance(c, dict) and c.get('type') == 'thinking':
+                                has_thinking = True
+                                break
+
                         # Extract tools used
                         tools = []
                         for c in (msg.get('content') or []):
@@ -5933,6 +6521,9 @@ def api_component_brain():
                             'model': model,
                             'tokens_in': tokens_in,
                             'tokens_out': tokens_out,
+                            'cache_read': cache_read,
+                            'cache_write': usage.get('cacheWrite', 0),
+                            'thinking': has_thinking,
                             'cost': '${:.4f}'.format(call_cost),
                             'cost_raw': call_cost,
                             'tools_used': tools,
@@ -5951,6 +6542,9 @@ def api_component_brain():
     total = len(calls)
     avg_ms = int(sum(durations) / len(durations)) if durations else 0
     primary_model = max(models_seen, key=lambda m: sum(1 for c in calls if c['model'] == m)) if models_seen else 'unknown'
+    thinking_count = sum(1 for c in calls if c.get('thinking'))
+    cache_hit_count = sum(1 for c in calls if c.get('cache_read', 0) > 0)
+    total_cache_write = sum(c.get('cache_write', 0) for c in calls)
 
     result = {
         'stats': {
@@ -5959,10 +6553,13 @@ def api_component_brain():
                 'input': total_input,
                 'output': total_output,
                 'cache_read': total_cache_read,
+                'cache_write': total_cache_write,
             },
             'today_cost': '${:.2f}'.format(total_cost),
             'model': primary_model,
             'avg_response_ms': avg_ms,
+            'thinking_calls': thinking_count,
+            'cache_hits': cache_hit_count,
         },
         'calls': calls[offset:offset + limit],
         'total': total,
