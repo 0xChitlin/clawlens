@@ -8007,8 +8007,8 @@ BANNER = r"""
   🦞  See your agent think
 
   Tabs: Overview · 📊 Usage · Sessions · Crons · Logs
-        Memory · 📜 Transcripts · Flow
-  New:  📡 OTLP receiver · Real-time metrics · Model breakdown
+        Memory · 📜 Transcripts · 🌊 Flow
+  Flow: Click nodes: 🧠 Automation Advisor · 💰 Cost Optimizer · 🕰️ Time Travel
 """
 
 

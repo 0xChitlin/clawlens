@@ -2,6 +2,30 @@
 
 ## Latest Updates
 
+### February 10, 2026 - 7:46 PM CET
+**UX Polish: Enhanced Startup Banner with Flow Features** ✅ COMPLETE
+
+Updated the startup banner to better showcase v0.2.6's interactive Flow capabilities:
+
+**🎯 Banner Improvements:**
+- **Flow Tab Enhancement**: Changed "Flow" → "🌊 Flow" with visual emoji
+- **Feature Highlights**: Added prominent call-out for clickable Flow nodes
+- **Current Features**: Showcases 🧠 Automation Advisor, 💰 Cost Optimizer, 🕰️ Time Travel
+- **User Education**: Helps new users discover interactive Flow components immediately
+
+**🚀 Impact:**
+- Better onboarding for new users discovering the dashboard's capabilities
+- Highlights the advanced features that differentiate this dashboard from basic monitoring tools
+- Encourages exploration of interactive Flow components on first startup
+- Professional presentation of current feature set in v0.2.6
+
+**Technical Changes:**
+- Updated BANNER constant to reflect current interactive Flow features
+- Maintained clean ASCII art layout with improved information architecture
+- Service restarted to apply changes immediately
+
+This small polish ensures users immediately understand the dashboard's full capabilities, particularly the unique interactive Flow visualization that sets it apart from traditional observability tools.
+
 ### February 10, 2026 - 6:45 PM CET
 **Documentation: CHANGELOG.md Update for v0.2.6** ✅ COMPLETE
 
