@@ -20,6 +20,7 @@ import sys
 import glob
 import json
 import socket
+from collections import deque
 import argparse
 import subprocess
 import time
@@ -585,6 +586,7 @@ def get_local_ip():
     """Get the machine's LAN IP address."""
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.settimeout(0.2)
         s.connect(("8.8.8.8", 80))
         ip = s.getsockname()[0]
         s.close()
@@ -693,6 +695,45 @@ DASHBOARD_HTML = r"""
   .page { display: none; padding: 16px 20px; max-width: 1200px; margin: 0 auto; }
   #page-overview { max-width: 1600px; padding: 8px 12px; }
   .page.active { display: block; }
+  body.booting #zoom-wrapper { opacity: 0; pointer-events: none; transform: translateY(4px); }
+  #zoom-wrapper { opacity: 1; transition: opacity 0.28s ease, transform 0.28s ease; }
+  .boot-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: radial-gradient(1000px 540px at 70% -20%, rgba(15,111,255,0.18), transparent 60%), var(--bg-primary);
+    transition: opacity 0.28s ease;
+  }
+  .boot-overlay.hide { opacity: 0; pointer-events: none; }
+  .boot-card {
+    width: min(540px, calc(100vw - 32px));
+    border-radius: 14px;
+    background: color-mix(in srgb, var(--bg-secondary) 92%, transparent);
+    border: 1px solid var(--border-primary);
+    box-shadow: var(--card-shadow-hover);
+    padding: 18px 18px 14px;
+  }
+  .boot-title { font-size: 20px; font-weight: 800; color: var(--text-primary); margin-bottom: 4px; }
+  .boot-sub { font-size: 12px; color: var(--text-muted); margin-bottom: 14px; }
+  .boot-spinner {
+    width: 28px; height: 28px; border-radius: 50%;
+    border: 2px solid var(--border-primary); border-top-color: var(--bg-accent);
+    animation: spin 0.8s linear infinite; margin-bottom: 10px;
+  }
+  .boot-steps { display: grid; gap: 8px; }
+  .boot-step {
+    display: flex; align-items: center; gap: 8px; padding: 8px 10px;
+    border: 1px solid var(--border-secondary); border-radius: 10px; background: var(--bg-tertiary);
+    font-size: 12px; color: var(--text-secondary);
+  }
+  .boot-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--text-faint); flex-shrink: 0; }
+  .boot-step.loading .boot-dot { background: #f59e0b; box-shadow: 0 0 0 4px rgba(245,158,11,0.18); }
+  .boot-step.done .boot-dot { background: #22c55e; box-shadow: 0 0 0 4px rgba(34,197,94,0.16); }
+  .boot-step.fail .boot-dot { background: #ef4444; box-shadow: 0 0 0 4px rgba(239,68,68,0.16); }
+  @keyframes spin { to { transform: rotate(360deg); } }
 
   .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; margin-bottom: 16px; }
   .card { background: var(--bg-tertiary); border: 1px solid var(--border-primary); border-radius: 12px; padding: 20px; box-shadow: var(--card-shadow); transition: transform 0.2s ease, box-shadow 0.2s ease; }
@@ -1196,7 +1237,20 @@ DASHBOARD_HTML = r"""
 </style>
 <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 </head>
-<body data-theme="light"><script>var t=localStorage.getItem('openclaw-theme');if(t==='dark')document.body.setAttribute('data-theme','dark');</script>
+<body data-theme="light" class="booting"><script>var t=localStorage.getItem('openclaw-theme');if(t==='dark')document.body.setAttribute('data-theme','dark');</script>
+<div class="boot-overlay" id="boot-overlay">
+  <div class="boot-card">
+    <div class="boot-spinner"></div>
+    <div class="boot-title">Initializing OpenClaw Dashboard</div>
+    <div class="boot-sub" id="boot-sub">Loading model, tasks, system health, and live streams…</div>
+    <div class="boot-steps">
+      <div class="boot-step loading" id="boot-step-overview"><span class="boot-dot"></span><span>Loading overview + model context</span></div>
+      <div class="boot-step" id="boot-step-tasks"><span class="boot-dot"></span><span>Loading active tasks</span></div>
+      <div class="boot-step" id="boot-step-health"><span class="boot-dot"></span><span>Loading system health</span></div>
+      <div class="boot-step" id="boot-step-streams"><span class="boot-dot"></span><span>Connecting live streams</span></div>
+    </div>
+  </div>
+</div>
 <div class="zoom-wrapper" id="zoom-wrapper">
 <div class="nav">
   <h1><span>🦞</span> OpenClaw</h1>
@@ -1749,7 +1803,7 @@ function formatTime(ms) {
 
 async function fetchJsonWithTimeout(url, timeoutMs) {
   var ctrl = new AbortController();
-  var to = setTimeout(function() { ctrl.abort(); }, timeoutMs);
+  var to = setTimeout(function() { ctrl.abort('timeout'); }, timeoutMs);
   try {
     var r = await fetch(url, {signal: ctrl.signal});
     if (!r.ok) throw new Error('HTTP ' + r.status);
@@ -1836,9 +1890,11 @@ async function loadAll() {
       // Keep UI responsive with placeholder values until next refresh.
       loadMiniWidgets(overview, {todayCost:0, weekCost:0, monthCost:0, month:0, today:0});
     }
+    return true;
   } catch (e) {
     console.error('Initial load failed', e);
     document.getElementById('refresh-time').textContent = 'Load failed — retrying...';
+    return false;
   }
 }
 
@@ -2761,7 +2817,6 @@ function startHealthStream() {
   };
   healthStream.onerror = function() { setTimeout(startHealthStream, 30000); };
 }
-startHealthStream();
 
 // ===== System Health Panel =====
 async function loadSystemHealth() {
@@ -2833,6 +2888,7 @@ async function loadSystemHealth() {
       + '<div style="font-size:24px;font-weight:700;color:' + pctColor + ';">' + sa.successPct + '%</div>'
       + '<div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;">Success</div></div></div>';
     document.getElementById('sh-subagents').innerHTML = sahtml;
+    return true;
   } catch(e) {
     console.error('System health load failed', e);
     var msg = '<div style="padding:8px 10px;background:var(--bg-secondary);border:1px solid var(--border-secondary);border-radius:8px;font-size:12px;color:var(--text-muted);">Unable to load right now</div>';
@@ -2840,10 +2896,14 @@ async function loadSystemHealth() {
     document.getElementById('sh-disks').innerHTML = msg;
     document.getElementById('sh-crons').innerHTML = msg;
     document.getElementById('sh-subagents').innerHTML = msg;
+    return false;
   }
 }
-loadSystemHealth();
-setInterval(loadSystemHealth, 30000);
+function startSystemHealthRefresh() {
+  loadSystemHealth();
+  if (window._sysHealthTimer) clearInterval(window._sysHealthTimer);
+  window._sysHealthTimer = setInterval(loadSystemHealth, 30000);
+}
 
 // ===== Activity Heatmap =====
 async function loadHeatmap() {
@@ -3070,8 +3130,11 @@ function toggleMsg(idx) {
   }
 }
 
-loadAll();
-setInterval(loadAll, 10000);
+function startOverviewRefresh() {
+  loadAll();
+  if (window._overviewTimer) clearInterval(window._overviewTimer);
+  window._overviewTimer = setInterval(loadAll, 10000);
+}
 
 // Real-time log stream via SSE
 var logStream = null;
@@ -3143,8 +3206,6 @@ function appendLogLine(elId, line) {
     el.scrollTop = el.scrollHeight;
   }
 }
-
-startLogStream();
 
 // ===== Flow Visualization Engine =====
 var flowStats = { messages: 0, events: 0, activeTools: {}, msgTimestamps: [] };
@@ -3766,7 +3827,7 @@ async function loadOverviewTasks() {
     var data = await fetch('/api/subagents').then(function(r){return r.json();});
     var el = document.getElementById('overview-tasks-list');
     var countBadge = document.getElementById('overview-tasks-count-badge');
-    if (!el) return;
+    if (!el) return true;
     var agents = data.subagents || [];
 
     // Also load into hidden active-tasks-grid for compatibility
@@ -3778,7 +3839,7 @@ async function loadOverviewTasks() {
         + '<div style="font-size:32px;margin-bottom:12px;" class="tasks-empty-icon">😴</div>'
         + '<div style="font-size:14px;font-weight:600;color:var(--text-tertiary);margin-bottom:4px;">No active tasks</div>'
         + '<div style="font-size:12px;">The AI is idle.</div></div>';
-      return;
+      return true;
     }
 
     var running = [], done = [], failed = [];
@@ -3800,7 +3861,7 @@ async function loadOverviewTasks() {
         + '<div style="font-size:32px;margin-bottom:12px;" class="tasks-empty-icon">😴</div>'
         + '<div style="font-size:14px;font-weight:600;color:var(--text-tertiary);margin-bottom:4px;">No active tasks</div>'
         + '<div style="font-size:12px;">The AI is idle.</div></div>';
-      return;
+      return true;
     }
 
     var html = '';
@@ -3822,7 +3883,10 @@ async function loadOverviewTasks() {
     var scrollTop = el.scrollTop;
     el.innerHTML = html;
     el.scrollTop = scrollTop;
-  } catch(e) {}
+    return true;
+  } catch(e) {
+    return false;
+  }
 }
 
 function startOverviewTasksRefresh() {
@@ -4106,7 +4170,13 @@ var _brainRefreshTimer = null;
 var _brainPage = 0;
 
 function loadBrainData(isRefresh) {
-  fetch('/api/component/brain?limit=50&offset=' + (_brainPage * 50)).then(function(r) { return r.json(); }).then(function(data) {
+  var url = '/api/component/brain?limit=50&offset=' + (_brainPage * 50);
+  fetchJsonWithTimeout(url, 8000).catch(function(err) {
+    if (String((err && err.message) || '').toLowerCase().includes('abort')) {
+      return fetchJsonWithTimeout(url, 15000);
+    }
+    throw err;
+  }).then(function(data) {
     var body = document.getElementById('comp-modal-body');
     var s = data.stats || {};
     var tok = s.today_tokens || {};
@@ -4193,9 +4263,11 @@ function loadBrainData(isRefresh) {
     body.innerHTML = html;
     document.getElementById('comp-modal-footer').textContent = 'Auto-refreshing · Last updated: ' + new Date().toLocaleTimeString() + ' · ' + (data.total||0) + ' LLM calls today';
   }).catch(function(e) {
-    if (!isRefresh) {
-      document.getElementById('comp-modal-body').innerHTML = '<div style="text-align:center;padding:20px;color:var(--text-error);">Failed to load brain data: ' + e.message + '</div>';
+    var msg = String((e && e.message) || 'Unknown error');
+    if (msg.toLowerCase().includes('abort')) {
+      msg = 'Request timed out. The brain panel is heavy; please retry in 2-3 seconds.';
     }
+    document.getElementById('comp-modal-body').innerHTML = '<div style="text-align:center;padding:20px;color:var(--text-error);">Failed to load brain data: ' + msg + '</div>';
   });
 }
 
@@ -5126,6 +5198,55 @@ function renderModalFull(el) {
 }
 
 // Initialize theme and zoom on page load
+function setBootStep(stepId, state, subtitle) {
+  var el = document.getElementById('boot-step-' + stepId);
+  if (!el) return;
+  el.classList.remove('loading', 'done', 'fail');
+  if (state) el.classList.add(state);
+  if (subtitle) {
+    var textEl = el.querySelector('span:last-child');
+    if (textEl) textEl.textContent = subtitle;
+  }
+}
+
+function finishBootOverlay() {
+  var overlay = document.getElementById('boot-overlay');
+  document.body.classList.remove('booting');
+  document.body.classList.add('app-ready');
+  if (overlay) {
+    overlay.classList.add('hide');
+    setTimeout(function() { if (overlay && overlay.parentNode) overlay.parentNode.removeChild(overlay); }, 350);
+  }
+}
+
+async function bootDashboard() {
+  setBootStep('overview', 'loading', 'Loading overview + model context');
+  var okOverview = await loadAll();
+  setBootStep('overview', okOverview ? 'done' : 'fail', okOverview ? 'Overview ready' : 'Overview delayed');
+
+  setBootStep('tasks', 'loading', 'Loading active tasks');
+  var okTasks = await loadOverviewTasks();
+  setBootStep('tasks', okTasks ? 'done' : 'fail', okTasks ? 'Tasks ready' : 'Tasks delayed');
+
+  setBootStep('health', 'loading', 'Loading system health');
+  var okHealth = await loadSystemHealth();
+  setBootStep('health', okHealth ? 'done' : 'fail', okHealth ? 'System health ready' : 'System health delayed');
+
+  setBootStep('streams', 'loading', 'Connecting live streams');
+  try { startLogStream(); } catch (e) {}
+  try { startHealthStream(); } catch (e) {}
+  setBootStep('streams', 'done', 'Live streams connected');
+
+  startSystemHealthRefresh();
+  startOverviewRefresh();
+  startOverviewTasksRefresh();
+  startActiveTasksRefresh();
+
+  var sub = document.getElementById('boot-sub');
+  if (sub) sub.textContent = 'Dashboard ready';
+  setTimeout(finishBootOverlay, 180);
+}
+
 document.addEventListener('DOMContentLoaded', function() {
   initTheme();
   initZoom();
@@ -5133,8 +5254,7 @@ document.addEventListener('DOMContentLoaded', function() {
   initOverviewFlow();
   initOverviewCompClickHandlers();
   initFlow();
-  loadAll();
-  startOverviewTasksRefresh();
+  bootDashboard();
 });
 </script>
 </div> <!-- end zoom-wrapper -->
@@ -6748,7 +6868,14 @@ def api_component_tool(name):
         return jsonify(_api_tool_cache[name])
     sessions_dir = SESSIONS_DIR or os.path.expanduser('~/.openclaw/agents/main/sessions')
     if not os.path.isdir(sessions_dir):
-        sessions_dir = os.path.expanduser('~/.moltbot/agents/main/sessions')
+        for p in [
+            os.path.expanduser('~/.clawdbot/agents/main/sessions'),
+            os.path.expanduser('~/.moltbot/agents/main/sessions'),
+            os.path.expanduser('~/.openclaw/agents/main/sessions'),
+        ]:
+            if os.path.isdir(p):
+                sessions_dir = p
+                break
     if not os.path.isdir(sessions_dir):
         sessions_dir = os.path.expanduser('~/.clawdbot/agents/main/sessions')
 
@@ -7725,12 +7852,12 @@ def _get_sessions():
         return _sessions_cache['data']
 
     def _read_session_model_fast(file_path):
-        """Best-effort model extraction from the first part of a session file."""
+        """Best-effort model extraction from the tail of a session file."""
         try:
+            lines = []
             with open(file_path, 'r') as f:
-                for i, line in enumerate(f):
-                    if i > 200:
-                        break
+                lines = list(deque(f, maxlen=400))
+                for line in reversed(lines):
                     try:
                         obj = json.loads(line.strip())
                     except Exception:
