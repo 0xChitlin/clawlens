@@ -1,9 +1,9 @@
-# Publish `clawmetry` To PyPI
+# Publish `clawlens` To PyPI
 
 From repo root:
 
 ```bash
-cd packages/clawmetry
+cd packages/clawlens
 python3 -m pip install --upgrade build twine
 python3 -m build
 python3 -m twine upload dist/*
@@ -12,8 +12,8 @@ python3 -m twine upload dist/*
 After publish:
 
 ```bash
-pip install clawmetry
-clawmetry
+pip install clawlens
+clawlens
 ```
 
 Notes:

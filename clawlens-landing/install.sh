@@ -1,9 +1,9 @@
 #!/bin/bash
-# Clawmetry — One-line installer
-# Usage: curl -fsSL https://raw.githubusercontent.com/vivekchand/clawmetry/main/install.sh | bash
+# Clawlens — One-line installer
+# Usage: curl -fsSL https://raw.githubusercontent.com/vivekchand/clawlens/main/install.sh | bash
 set -e
 
-echo "🔭 Installing Clawmetry — OpenClaw Observability Dashboard"
+echo "🔭 Installing Clawlens — OpenClaw Observability Dashboard"
 echo ""
 
 # Detect OS and install python3-venv if needed
@@ -19,17 +19,17 @@ elif command -v apk &>/dev/null; then
 fi
 
 # Create isolated venv (remove old one to ensure clean state)
-echo "→ Creating virtual environment at /opt/clawmetry..."
-sudo rm -rf /opt/clawmetry
-sudo python3 -m venv /opt/clawmetry
-sudo /opt/clawmetry/bin/pip install --upgrade pip >/dev/null 2>&1
+echo "→ Creating virtual environment at /opt/clawlens..."
+sudo rm -rf /opt/clawlens
+sudo python3 -m venv /opt/clawlens
+sudo /opt/clawlens/bin/pip install --upgrade pip >/dev/null 2>&1
 
-# Install clawmetry
-echo "→ Installing clawmetry from PyPI..."
-sudo /opt/clawmetry/bin/pip install --no-cache-dir clawmetry >/dev/null 2>&1
+# Install clawlens
+echo "→ Installing clawlens from PyPI..."
+sudo /opt/clawlens/bin/pip install --no-cache-dir clawlens >/dev/null 2>&1
 
 # Create symlink for easy access
-sudo ln -sf /opt/clawmetry/bin/clawmetry /usr/local/bin/clawmetry
+sudo ln -sf /opt/clawlens/bin/clawlens /usr/local/bin/clawlens
 
 # Detect OpenClaw workspace
 WORKSPACE=""
@@ -40,12 +40,12 @@ elif [ -d "/root/.openclaw" ]; then
 fi
 
 echo ""
-echo "✅ Clawmetry installed successfully!"
+echo "✅ Clawlens installed successfully!"
 echo ""
-echo "  Version: $(clawmetry --version 2>/dev/null || echo 'installed')"
+echo "  Version: $(clawlens --version 2>/dev/null || echo 'installed')"
 echo ""
 echo "  Start with:"
-echo "    clawmetry --host 0.0.0.0 --port 8900"
+echo "    clawlens --host 0.0.0.0 --port 8900"
 echo ""
 if [ -n "$WORKSPACE" ]; then
     echo "  OpenClaw workspace detected: $WORKSPACE"
@@ -54,6 +54,6 @@ fi
 echo "  Then open http://YOUR_IP:8900 in your browser"
 echo ""
 echo "  To run in background:"
-echo "    nohup clawmetry --host 0.0.0.0 --port 8900 &"
+echo "    nohup clawlens --host 0.0.0.0 --port 8900 &"
 echo ""
 echo "🔭 Happy observing!"

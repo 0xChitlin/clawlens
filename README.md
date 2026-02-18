@@ -1,20 +1,20 @@
-# 🦞 ClawMetry
+# 🦞 ClawLens
 
-[![PyPI](https://img.shields.io/pypi/v/clawmetry)](https://pypi.org/project/clawmetry/)
+[![PyPI](https://img.shields.io/pypi/v/clawlens)](https://pypi.org/project/clawlens/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![GitHub stars](https://img.shields.io/github/stars/vivekchand/clawmetry)](https://github.com/vivekchand/clawmetry/stargazers)
+[![GitHub stars](https://img.shields.io/github/stars/0xChitlin/clawlens)](https://github.com/0xChitlin/clawlens/stargazers)
 
-**See your agent think.** Real-time observability for [OpenClaw](https://github.com/openclaw/openclaw) AI agents.
+**Full observability for your .claw agent.** Watch your agent think, track costs, debug crons, and browse memory — all in one dashboard.
 
 One command. Zero config. Auto-detects everything.
 
 ```bash
-pip install clawmetry && clawmetry
+pip install clawlens && clawlens
 ```
 
 Opens at **http://localhost:8900** and you're done.
 
-![Flow Visualization](https://clawmetry.com/screenshots/flow.png)
+![Flow Visualization](https://clawlens.com/screenshots/flow.png)
 
 ## What You Get
 
@@ -31,45 +31,45 @@ Opens at **http://localhost:8900** and you're done.
 
 | Flow | Overview | Sub-Agent |
 |------|----------|-----------|
-| ![Flow](https://clawmetry.com/screenshots/flow.png) | ![Overview](https://clawmetry.com/screenshots/overview.png) | ![Sub-Agent](https://clawmetry.com/screenshots/subagent.png) |
+| ![Flow](https://clawlens.com/screenshots/flow.png) | ![Overview](https://clawlens.com/screenshots/overview.png) | ![Sub-Agent](https://clawlens.com/screenshots/subagent.png) |
 
 | Summary | Crons | Memory |
 |---------|-------|--------|
-| ![Summary](https://clawmetry.com/screenshots/summary.png) | ![Crons](https://clawmetry.com/screenshots/crons.png) | ![Memory](https://clawmetry.com/screenshots/memory.png) |
+| ![Summary](https://clawlens.com/screenshots/summary.png) | ![Crons](https://clawlens.com/screenshots/crons.png) | ![Memory](https://clawlens.com/screenshots/memory.png) |
 
 ## Install
 
 **pip (recommended):**
 ```bash
-pip install clawmetry
-clawmetry
+pip install clawlens
+clawlens
 ```
 
 **One-liner:**
 ```bash
-curl -sSL https://raw.githubusercontent.com/vivekchand/clawmetry/main/install.sh | bash
+curl -sSL https://raw.githubusercontent.com/0xChitlin/clawlens/main/install.sh | bash
 ```
 
 **From source:**
 ```bash
-git clone https://github.com/vivekchand/clawmetry.git
-cd clawmetry && pip install flask && python3 dashboard.py
+git clone https://github.com/0xChitlin/clawlens.git
+cd clawlens && pip install flask && python3 dashboard.py
 ```
 
 ## Configuration
 
-Most people don't need any config. ClawMetry auto-detects your workspace, logs, sessions, and crons.
+Most people don't need any config. ClawLens auto-detects your workspace, logs, sessions, and crons.
 
 If you do need to customize:
 
 ```bash
-clawmetry --port 9000              # Custom port (default: 8900)
-clawmetry --host 127.0.0.1         # Bind to localhost only
-clawmetry --workspace ~/mybot      # Custom workspace path
-clawmetry --name "Alice"           # Your name in Flow visualization
+clawlens --port 9000              # Custom port (default: 8900)
+clawlens --host 127.0.0.1         # Bind to localhost only
+clawlens --workspace ~/mybot      # Custom workspace path
+clawlens --name "Alice"           # Your name in Flow visualization
 ```
 
-All options: `clawmetry --help`
+All options: `clawlens --help`
 
 ## Requirements
 
@@ -89,6 +89,6 @@ MIT
 ---
 
 <p align="center">
-  <strong>🦞 See your agent think</strong><br>
-  <sub>Built by <a href="https://github.com/vivekchand">@vivekchand</a> · <a href="https://clawmetry.com">clawmetry.com</a> · Part of the <a href="https://github.com/openclaw/openclaw">OpenClaw</a> ecosystem</sub>
+  <strong>🦞 Full observability for your .claw agent</strong><br>
+  <sub>Built by <a href="https://github.com/vivekchand">@vivekchand</a> · <a href="https://clawlens.com">clawlens.com</a> · Part of the <a href="https://github.com/openclaw/openclaw">OpenClaw</a> ecosystem</sub>
 </p>

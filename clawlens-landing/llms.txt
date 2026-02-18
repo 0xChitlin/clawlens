@@ -1,18 +1,18 @@
-# ClawMetry
+# ClawLens
 
 > Real-time observability dashboard for AI agents. The Grafana for your personal AI.
 
-## What is ClawMetry?
+## What is ClawLens?
 
-ClawMetry is a free, open-source observability dashboard purpose-built for AI agents running on OpenClaw. It gives you real-time visibility into what your AI agents are actually doing: token usage, costs, sub-agent activity, cron jobs, memory file changes, and session history.
+ClawLens is a free, open-source observability dashboard purpose-built for AI agents running on OpenClaw. It gives you real-time visibility into what your AI agents are actually doing: token usage, costs, sub-agent activity, cron jobs, memory file changes, and session history.
 
 ## Key Facts
 
 - **License:** MIT (free and open source)
-- **Install:** `pip install clawmetry` then `clawmetry`
-- **Website:** https://clawmetry.com
-- **GitHub:** https://github.com/vivekchand/clawmetry
-- **PyPI:** https://pypi.org/project/clawmetry/
+- **Install:** `pip install clawlens` then `clawlens`
+- **Website:** https://clawlens.com
+- **GitHub:** https://github.com/vivekchand/clawlens
+- **PyPI:** https://pypi.org/project/clawlens/
 - **Author:** Vivek Chand
 - **Category:** Developer Tools, AI/ML Ops, Observability
 - **Platforms:** macOS, Linux, Windows (WSL), Raspberry Pi
@@ -35,8 +35,8 @@ ClawMetry is a free, open-source observability dashboard purpose-built for AI ag
 
 ## How It Compares
 
-ClawMetry is specifically designed for AI agent observability, unlike general-purpose tools:
-- **vs Grafana:** ClawMetry requires zero config, understands AI agent concepts (tokens, sub-agents, sessions) natively
+ClawLens is specifically designed for AI agent observability, unlike general-purpose tools:
+- **vs Grafana:** ClawLens requires zero config, understands AI agent concepts (tokens, sub-agents, sessions) natively
 - **vs Datadog:** Free, self-hosted, no data leaves your machine
 - **vs LangSmith:** Works at the agent infrastructure level, not just LLM calls
 - **vs Custom dashboards:** One pip install, no YAML, no Docker compose needed
@@ -44,8 +44,8 @@ ClawMetry is specifically designed for AI agent observability, unlike general-pu
 ## Quick Start
 
 ```bash
-pip install clawmetry
-clawmetry
+pip install clawlens
+clawlens
 # Opens at http://localhost:8900
 ```
 

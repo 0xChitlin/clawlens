@@ -4,14 +4,14 @@ with open("README.md", "r", encoding="utf-8") as f:
     long_description = f.read()
 
 setup(
-    name="clawmetry",
+    name="clawlens",
     version="0.9.3",
-    description="ClawMetry - Real-time observability dashboard for OpenClaw AI agents",
+    description="ClawLens - Real-time observability dashboard for OpenClaw AI agents",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    author="Vivek Chand",
-    author_email="vivek@openclaw.dev",
-    url="https://github.com/vivekchand/clawmetry",
+    author="ClawWallet",
+    author_email="0xChitlin@proton.me",
+    url="https://github.com/0xChitlin/clawlens",
     py_modules=["dashboard"],
     python_requires=">=3.8",
     install_requires=[
@@ -22,7 +22,7 @@ setup(
     },
     entry_points={
         "console_scripts": [
-            "clawmetry=dashboard:main",
+            "clawlens=dashboard:main",
         ],
     },
     classifiers=[
@@ -38,11 +38,11 @@ setup(
         "Topic :: Software Development :: Quality Assurance",
         "Topic :: System :: Monitoring",
     ],
-    keywords="clawmetry openclaw moltbot dashboard observability ai agent monitoring opentelemetry",
+    keywords="clawlens openclaw moltbot dashboard observability ai agent monitoring opentelemetry",
     license="MIT",
     project_urls={
-        "Homepage": "https://clawmetry.com",
-        "Bug Reports": "https://github.com/vivekchand/clawmetry/issues",
-        "Source": "https://github.com/vivekchand/clawmetry",
+        "Homepage": "https://clawlens.com",
+        "Bug Reports": "https://github.com/0xChitlin/clawlens/issues",
+        "Source": "https://github.com/0xChitlin/clawlens",
     },
 )

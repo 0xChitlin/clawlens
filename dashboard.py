@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
 """
-ClawMetry - See your agent think 🦞
+ClawLens - Full observability for your .claw agent 🦞
 
 Real-time observability dashboard for OpenClaw AI agents.
 Single-file Flask app with zero config - auto-detects your setup.
 
 Usage:
-    clawmetry                             # Auto-detect everything
-    clawmetry --port 9000                 # Custom port
-    clawmetry --workspace ~/bot           # Custom workspace
-    OPENCLAW_HOME=~/bot clawmetry
+    clawlens                             # Auto-detect everything
+    clawlens --port 9000                 # Custom port
+    clawlens --workspace ~/bot           # Custom workspace
+    OPENCLAW_HOME=~/bot clawlens
 
-https://github.com/vivekchand/clawmetry
+https://github.com/0xChitlin/clawlens
 MIT License
 """
 
@@ -74,7 +74,7 @@ _active_health_stream_clients = 0
 EXTRA_SERVICES = []  # List of {'name': str, 'port': int} from --monitor-service flags
 
 # ── Multi-Node Fleet Configuration ─────────────────────────────────────
-FLEET_API_KEY = os.environ.get("CLAWMETRY_FLEET_KEY", "")
+FLEET_API_KEY = os.environ.get("CLAWLENS_FLEET_KEY", "")
 FLEET_DB_PATH = None  # Set via CLI or auto-detected
 FLEET_NODE_TIMEOUT = 300  # seconds before node is considered offline
 
@@ -86,7 +86,7 @@ _budget_alert_cooldowns = {}  # rule_id -> last_fired_timestamp
 _AGENT_DOWN_SECONDS = 300  # 5 min with no OTLP data = agent down alert
 
 # ── OTLP Metrics Store ─────────────────────────────────────────────────
-METRICS_FILE = None  # Set via CLI/env, defaults to {WORKSPACE}/.clawmetry-metrics.json
+METRICS_FILE = None  # Set via CLI/env, defaults to {WORKSPACE}/.clawlens-metrics.json
 _metrics_lock = threading.Lock()
 _otel_last_received = 0  # timestamp of last OTLP data received
 
@@ -106,8 +106,8 @@ def _metrics_file_path():
     if METRICS_FILE:
         return METRICS_FILE
     if WORKSPACE:
-        return os.path.join(WORKSPACE, '.clawmetry-metrics.json')
-    return os.path.expanduser('~/.clawmetry-metrics.json')
+        return os.path.join(WORKSPACE, '.clawlens-metrics.json')
+    return os.path.expanduser('~/.clawlens-metrics.json')
 
 
 def _load_metrics_from_disk():
@@ -233,8 +233,8 @@ def _fleet_db_path():
     if FLEET_DB_PATH:
         return FLEET_DB_PATH
     if WORKSPACE:
-        return os.path.join(WORKSPACE, '.clawmetry-fleet.db')
-    return os.path.expanduser('~/.clawmetry-fleet.db')
+        return os.path.join(WORKSPACE, '.clawlens-fleet.db')
+    return os.path.expanduser('~/.clawlens-fleet.db')
 
 
 def _fleet_db():
@@ -599,7 +599,7 @@ def _send_telegram_alert(message):
             url = f'https://api.telegram.org/bot{token}/sendMessage'
             payload = json.dumps({
                 'chat_id': chat_id,
-                'text': f'[ClawMetry Alert] {message}',
+                'text': f'[ClawLens Alert] {message}',
                 'parse_mode': 'Markdown',
             }).encode()
             req = urllib.request.Request(
@@ -614,7 +614,7 @@ def _send_telegram_alert(message):
     try:
         _gw_invoke('message', {
             'action': 'send',
-            'message': f'[ClawMetry Alert] {message}',
+            'message': f'[ClawLens Alert] {message}',
         })
     except Exception:
         pass
@@ -1394,7 +1394,7 @@ DASHBOARD_HTML = r"""
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ClawMetry 🦞</title>
+<title>ClawLens 🦞</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
@@ -2052,16 +2052,16 @@ DASHBOARD_HTML = r"""
 <div id="login-overlay" style="display:none;position:fixed;inset:0;z-index:99999;background:var(--bg-primary,#0f172a);align-items:center;justify-content:center;flex-direction:column;">
   <div style="background:var(--card-bg,#1e293b);border-radius:16px;padding:40px;max-width:400px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,0.4);text-align:center;">
     <div style="font-size:48px;margin-bottom:16px;">🦞</div>
-    <h2 style="color:#e2e8f0;margin:0 0 8px;">ClawMetry</h2>
+    <h2 style="color:#e2e8f0;margin:0 0 8px;">ClawLens</h2>
     <p style="color:#94a3b8;margin:0 0 24px;font-size:14px;">Enter your OpenClaw Gateway Token</p>
-    <input id="login-token" type="password" placeholder="Gateway token..." style="width:100%;box-sizing:border-box;padding:12px 16px;border-radius:8px;border:1px solid #334155;background:#0f172a;color:#e2e8f0;font-size:15px;margin-bottom:16px;outline:none;" onkeydown="if(event.key==='Enter')clawmetryLogin()">
-    <button onclick="clawmetryLogin()" style="width:100%;padding:12px;border-radius:8px;border:none;background:#3b82f6;color:#fff;font-size:15px;font-weight:600;cursor:pointer;">Login</button>
+    <input id="login-token" type="password" placeholder="Gateway token..." style="width:100%;box-sizing:border-box;padding:12px 16px;border-radius:8px;border:1px solid #334155;background:#0f172a;color:#e2e8f0;font-size:15px;margin-bottom:16px;outline:none;" onkeydown="if(event.key==='Enter')clawlensLogin()">
+    <button onclick="clawlensLogin()" style="width:100%;padding:12px;border-radius:8px;border:none;background:#3b82f6;color:#fff;font-size:15px;font-weight:600;cursor:pointer;">Login</button>
     <p id="login-error" style="color:#f87171;margin:12px 0 0;font-size:13px;display:none;">Invalid token</p>
   </div>
 </div>
 <script>
 (function(){
-  var stored = localStorage.getItem('clawmetry-token');
+  var stored = localStorage.getItem('clawlens-token');
   fetch('/api/auth/check' + (stored ? '?token=' + encodeURIComponent(stored) : ''))
     .then(function(r){return r.json()})
     .then(function(d){
@@ -2087,14 +2087,14 @@ DASHBOARD_HTML = r"""
     })
     .catch(function(){document.getElementById('login-overlay').style.display='none';});
 })();
-function clawmetryLogin(){
+function clawlensLogin(){
   var tok=document.getElementById('login-token').value.trim();
   if(!tok)return;
   fetch('/api/auth/check?token='+encodeURIComponent(tok))
     .then(function(r){return r.json()})
     .then(function(d){
       if(d.valid){
-        localStorage.setItem('clawmetry-token',tok);
+        localStorage.setItem('clawlens-token',tok);
         document.getElementById('login-overlay').style.display='none';
         var lb=document.getElementById('logout-btn');if(lb)lb.style.display='';
         location.reload();
@@ -2103,15 +2103,15 @@ function clawmetryLogin(){
       }
     });
 }
-function clawmetryLogout(){
-  localStorage.removeItem('clawmetry-token');
+function clawlensLogout(){
+  localStorage.removeItem('clawlens-token');
   location.reload();
 }
 // Inject auth header into all fetch calls
 (function(){
   var _origFetch=window.fetch;
   window.fetch=function(url,opts){
-    var tok=localStorage.getItem('clawmetry-token');
+    var tok=localStorage.getItem('clawlens-token');
     if(tok && typeof url==='string' && url.startsWith('/api/')){
       opts=opts||{};
       opts.headers=opts.headers||{};
@@ -2125,7 +2125,7 @@ function clawmetryLogout(){
 <div class="boot-overlay" id="boot-overlay">
   <div class="boot-card">
     <div class="boot-spinner"></div>
-    <div class="boot-title">Initializing ClawMetry</div>
+    <div class="boot-title">Initializing ClawLens</div>
     <div class="boot-sub" id="boot-sub">Loading model, tasks, system health, and live streams…</div>
     <div class="boot-steps">
       <div class="boot-step loading" id="boot-step-overview"><span class="boot-dot"></span><span>Loading overview + model context</span></div>
@@ -2137,11 +2137,11 @@ function clawmetryLogout(){
 </div>
 <div class="zoom-wrapper" id="zoom-wrapper">
 <div class="nav">
-  <h1><span>🦞</span> ClawMetry</h1>
+  <h1><span>🦞</span> ClawLens</h1>
   <div class="theme-toggle" onclick="var o=document.getElementById('gw-setup-overlay');o.dataset.mandatory='false';document.getElementById('gw-setup-close').style.display='';o.style.display='flex'" title="Gateway settings" style="cursor:pointer;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></div>
   <div class="theme-toggle" onclick="openBudgetModal()" title="Budget & Alerts" style="cursor:pointer;">&#128176;</div>
   <div class="theme-toggle" id="theme-toggle-btn" onclick="toggleTheme()" title="Toggle theme"><svg class="icon-moon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg></div>
-  <div class="theme-toggle" id="logout-btn" onclick="clawmetryLogout()" title="Logout" style="display:none;cursor:pointer;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></div>
+  <div class="theme-toggle" id="logout-btn" onclick="clawlensLogout()" title="Logout" style="display:none;cursor:pointer;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></div>
   <div class="zoom-controls">
     <button class="zoom-btn" onclick="zoomOut()" title="Zoom out (Ctrl/Cmd + -)">−</button>
     <span class="zoom-level" id="zoom-level" title="Current zoom level. Ctrl/Cmd + 0 to reset">100%</span>
@@ -4307,7 +4307,7 @@ async function loadHealth() {
 var healthStream = null;
 function startHealthStream() {
   if (healthStream) healthStream.close();
-  healthStream = new EventSource('/api/health-stream' + (localStorage.getItem('clawmetry-token') ? '?token=' + encodeURIComponent(localStorage.getItem('clawmetry-token')) : ''));
+  healthStream = new EventSource('/api/health-stream' + (localStorage.getItem('clawlens-token') ? '?token=' + encodeURIComponent(localStorage.getItem('clawlens-token')) : ''));
   healthStream.onmessage = function(e) {
     try {
       var data = JSON.parse(e.data);
@@ -4706,7 +4706,7 @@ var MAX_STREAM_LINES = 500;
 function startLogStream() {
   if (logStream) logStream.close();
   streamBuffer = [];
-  logStream = new EventSource('/api/logs-stream' + (localStorage.getItem('clawmetry-token') ? '?token=' + encodeURIComponent(localStorage.getItem('clawmetry-token')) : ''));
+  logStream = new EventSource('/api/logs-stream' + (localStorage.getItem('clawlens-token') ? '?token=' + encodeURIComponent(localStorage.getItem('clawlens-token')) : ''));
   logStream.onmessage = function(e) {
     var data = JSON.parse(e.data);
     streamBuffer.push(data.line);
@@ -7101,7 +7101,7 @@ async function showSnapshot(ts) {
   <div style="background:var(--bg-secondary, #1a1a2e); border:1px solid var(--border-primary, #333); border-radius:16px; padding:40px; max-width:440px; width:90%; text-align:center; box-shadow:0 20px 60px rgba(0,0,0,0.5); position:relative;">
     <button id="gw-setup-close" onclick="document.getElementById('gw-setup-overlay').style.display='none'" style="display:none; position:absolute; top:12px; right:16px; background:none; border:none; color:var(--text-muted, #888); font-size:22px; cursor:pointer; padding:4px 8px; line-height:1;">✕</button>
     <div style="font-size:48px; margin-bottom:16px;">🦞</div>
-    <h2 style="color:var(--text-primary, #fff); margin:0 0 8px; font-size:24px; font-weight:700;">ClawMetry Setup</h2>
+    <h2 style="color:var(--text-primary, #fff); margin:0 0 8px; font-size:24px; font-weight:700;">ClawLens Setup</h2>
     <p style="color:var(--text-muted, #888); margin:0 0 24px; font-size:14px;">Enter your OpenClaw gateway token to connect.</p>
     <input id="gw-token-input" type="password" placeholder="Paste your gateway token" 
       style="width:100%; padding:12px 16px; border:1px solid var(--border-primary, #444); border-radius:8px; background:var(--bg-primary, #111); color:var(--text-primary, #fff); font-size:14px; font-family:monospace; box-sizing:border-box; outline:none; margin-bottom:8px;"
@@ -7114,7 +7114,7 @@ async function showSnapshot(ts) {
       style="width:100%; padding:12px; border:none; border-radius:8px; background:var(--bg-accent, #0f6fff); color:#fff; font-size:15px; font-weight:600; cursor:pointer; font-family:Manrope,sans-serif;">
       Connect
     </button>
-    <p style="color:var(--text-faint, #555); font-size:11px; margin:16px 0 0;">Token is stored locally on this ClawMetry instance.</p>
+    <p style="color:var(--text-faint, #555); font-size:11px; margin:16px 0 0;">Token is stored locally on this ClawLens instance.</p>
   </div>
 </div>
 
@@ -7126,7 +7126,7 @@ async function checkGwConfig() {
     const d = await r.json();
     if (!d.configured) {
       // Check localStorage first
-      const saved = localStorage.getItem('clawmetry-gw-token');
+      const saved = localStorage.getItem('clawlens-gw-token');
       if (saved) {
         // Try auto-connecting with saved token
         const r2 = await fetch('/api/gw/config', {
@@ -7176,8 +7176,8 @@ async function gwSetupConnect() {
     if (d.ok) {
       statusEl.textContent = 'Connected to ' + d.url;
       btn.textContent = 'Connected!';
-      localStorage.setItem('clawmetry-gw-token', token);
-      localStorage.setItem('clawmetry-token', token);
+      localStorage.setItem('clawlens-gw-token', token);
+      localStorage.setItem('clawlens-token', token);
       updateGwStatus(true, d.url);
       setTimeout(() => {
         document.getElementById('gw-setup-overlay').style.display = 'none';
@@ -7241,7 +7241,7 @@ import urllib.request as _urllib_req
 import urllib.error as _urllib_err
 import uuid as _uuid
 
-_GW_CONFIG_FILE = os.path.expanduser('~/.clawmetry-gateway.json')
+_GW_CONFIG_FILE = os.path.expanduser('~/.clawlens-gateway.json')
 
 # ── WebSocket RPC Client ────────────────────────────────────────────────
 _ws_client = None
@@ -7269,11 +7269,11 @@ def _gw_ws_connect(url=None, token=None):
         ws.recv()
         # Send connect
         connect_msg = {
-            'type': 'req', 'id': 'clawmetry-connect', 'method': 'connect',
+            'type': 'req', 'id': 'clawlens-connect', 'method': 'connect',
             'params': {
                 'minProtocol': 3, 'maxProtocol': 3,
                 'client': {'id': 'cli', 'version': __version__, 'platform': 'linux',
-                           'mode': 'cli', 'instanceId': f'clawmetry-{_uuid.uuid4().hex[:8]}'},
+                           'mode': 'cli', 'instanceId': f'clawlens-{_uuid.uuid4().hex[:8]}'},
                 'role': 'operator', 'scopes': ['operator.admin'],
                 'auth': {'token': tok},
             }
@@ -7282,7 +7282,7 @@ def _gw_ws_connect(url=None, token=None):
         # Wait for connect response
         for _ in range(5):
             r = json.loads(ws.recv())
-            if r.get('type') == 'res' and r.get('id') == 'clawmetry-connect':
+            if r.get('type') == 'res' and r.get('id') == 'clawlens-connect':
                 if r.get('ok'):
                     _ws_client = ws
                     _ws_connected = True
@@ -7448,7 +7448,7 @@ def api_gw_config():
                     'params': {
                         'minProtocol': 3, 'maxProtocol': 3,
                         'client': {'id': 'cli', 'version': __version__, 'platform': 'linux',
-                                   'mode': 'cli', 'instanceId': 'clawmetry-validate'},
+                                   'mode': 'cli', 'instanceId': 'clawlens-validate'},
                         'role': 'operator', 'scopes': ['operator.admin'],
                         'auth': {'token': token},
                     }
@@ -7578,7 +7578,7 @@ def _auto_discover_gateway(token):
                 'params': {
                     'minProtocol': 3, 'maxProtocol': 3,
                     'client': {'id': 'cli', 'version': __version__, 'platform': 'linux',
-                               'mode': 'cli', 'instanceId': 'clawmetry-discover'},
+                               'mode': 'cli', 'instanceId': 'clawlens-discover'},
                     'role': 'operator', 'scopes': ['operator.admin'],
                     'auth': {'token': token},
                 }
@@ -8259,7 +8259,7 @@ def otlp_metrics():
     if not _HAS_OTEL_PROTO:
         return jsonify({
             'error': 'opentelemetry-proto not installed',
-            'message': 'Install OTLP support: pip install clawmetry[otel]  '
+            'message': 'Install OTLP support: pip install clawlens[otel]  '
                        'or: pip install opentelemetry-proto protobuf',
         }), 501
 
@@ -8279,7 +8279,7 @@ def otlp_traces():
     if not _HAS_OTEL_PROTO:
         return jsonify({
             'error': 'opentelemetry-proto not installed',
-            'message': 'Install OTLP support: pip install clawmetry[otel]  '
+            'message': 'Install OTLP support: pip install clawlens[otel]  '
                        'or: pip install opentelemetry-proto protobuf',
         }), 501
 
@@ -8314,7 +8314,7 @@ FLEET_HTML = r"""
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ClawMetry Fleet</title>
+<title>ClawLens Fleet</title>
 <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -8356,7 +8356,7 @@ FLEET_HTML = r"""
 <body>
 <div class="header">
   <a href="/" class="back">< Dashboard</a>
-  <h1><span>ClawMetry</span> Fleet</h1>
+  <h1><span>ClawLens</span> Fleet</h1>
 </div>
 <div class="summary" id="summary"></div>
 <div class="search"><input type="text" id="search" placeholder="Search nodes..." oninput="filterNodes()"></div>
@@ -8638,7 +8638,7 @@ def api_budget_test_telegram():
         url = f'https://api.telegram.org/bot{token}/sendMessage'
         payload = json.dumps({
             'chat_id': chat_id,
-            'text': '\u2705 *ClawMetry Budget Alerts* - Test notification successful!',
+            'text': '\u2705 *ClawLens Budget Alerts* - Test notification successful!',
             'parse_mode': 'Markdown',
         }).encode()
         req = urllib.request.Request(url, data=payload, headers={'Content-Type': 'application/json'})
@@ -10809,7 +10809,7 @@ def api_health():
                        'detail': 'OTLP ready - no data received yet'})
     else:
         checks.append({'id': 'otel', 'status': 'warning', 'color': 'yellow',
-                       'detail': 'Not installed - pip install clawmetry[otel]'})
+                       'detail': 'Not installed - pip install clawlens[otel]'})
 
     return jsonify({'checks': checks})
 
@@ -11452,7 +11452,7 @@ BANNER = r"""
                                                 |___/
                           v{version}
 
-  🦞  See your agent think
+  🦞  Full observability for your .claw agent
 
   Tabs: Overview · 📊 Usage · Sessions · Crons · Logs
         Memory · 📜 Transcripts · 🌊 Flow
@@ -11462,7 +11462,7 @@ BANNER = r"""
 
 def main():
     parser = argparse.ArgumentParser(
-        description="ClawMetry - Real-time observability for your AI agent",
+        description="ClawLens - Real-time observability for your AI agent",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="Environment variables:\n"
                "  OPENCLAW_HOME         Agent workspace directory\n"
@@ -11487,9 +11487,9 @@ def main():
     parser.add_argument('--monitor-service', action='append', default=[], metavar='NAME:PORT',
                         help='Additional service to monitor (e.g. "My App:8080"). Can be repeated.')
     parser.add_argument('--mc-url', type=str, help='Mission Control URL (e.g. http://localhost:3002). Disabled by default.')
-    parser.add_argument('--fleet-api-key', type=str, help='API key for multi-node fleet authentication. Also via CLAWMETRY_FLEET_KEY env.')
+    parser.add_argument('--fleet-api-key', type=str, help='API key for multi-node fleet authentication. Also via CLAWLENS_FLEET_KEY env.')
     parser.add_argument('--fleet-db', type=str, help='Path to fleet SQLite database file.')
-    parser.add_argument('--version', '-v', action='version', version=f'clawmetry {__version__}')
+    parser.add_argument('--version', '-v', action='version', version=f'clawlens {__version__}')
 
     args = parser.parse_args()
     detect_config(args)
@@ -11541,7 +11541,7 @@ def main():
     # Initialize history/time-series system
     global _history_db, _history_collector
     if _HAS_HISTORY:
-        history_db_path = os.environ.get('CLAWMETRY_HISTORY_DB', None)
+        history_db_path = os.environ.get('CLAWLENS_HISTORY_DB', None)
         _history_db = HistoryDB(history_db_path)
         _history_collector = HistoryCollector(_history_db, _gw_invoke)
         _history_collector.start()
@@ -11563,7 +11563,7 @@ def main():
     print(f"  Sessions:   {SESSIONS_DIR}")
     print(f"  Logs:       {LOG_DIR}")
     print(f"  Metrics:    {_metrics_file_path()}")
-    print(f"  OTLP:       {'✅ Ready (opentelemetry-proto installed)' if _HAS_OTEL_PROTO else '❌ Not available (pip install clawmetry[otel])'}")
+    print(f"  OTLP:       {'✅ Ready (opentelemetry-proto installed)' if _HAS_OTEL_PROTO else '❌ Not available (pip install clawlens[otel])'}")
     print(f"  User:       {USER_NAME}")
     print(f"  Mode:       {'🛠️  Dev (auto-reload ON)' if args.debug else '🚀 Prod (auto-reload OFF)'}")
     print(f"  SSE Limits: {SSE_MAX_SECONDS}s max duration · logs {MAX_LOG_STREAM_CLIENTS} clients · health {MAX_HEALTH_STREAM_CLIENTS} clients")

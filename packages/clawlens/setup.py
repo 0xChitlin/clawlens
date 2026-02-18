@@ -4,13 +4,13 @@ with open("README.md", "r", encoding="utf-8") as f:
     long_description = f.read()
 
 setup(
-    name="clawmetry",
+    name="clawlens",
     version="0.1.0",
-    description="ClawMetry alias package for OpenClaw Dashboard",
+    description="ClawLens alias package for OpenClaw Dashboard",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    author="Vivek Chand",
-    author_email="vivek@openclaw.dev",
+    author="ClawWallet",
+    author_email="0xChitlin@proton.me",
     url="https://github.com/vivekchand/openclaw-dashboard",
     python_requires=">=3.8",
     install_requires=[
@@ -21,7 +21,7 @@ setup(
     },
     entry_points={
         "console_scripts": [
-            "clawmetry=dashboard:main",
+            "clawlens=dashboard:main",
             "openclaw-dashboard=dashboard:main",
         ],
     },
@@ -37,7 +37,7 @@ setup(
         "Programming Language :: Python :: 3.12",
         "Topic :: System :: Monitoring",
     ],
-    keywords="clawmetry openclaw dashboard observability ai agent monitoring",
+    keywords="clawlens openclaw dashboard observability ai agent monitoring",
     license="MIT",
     project_urls={
         "Bug Reports": "https://github.com/vivekchand/openclaw-dashboard/issues",

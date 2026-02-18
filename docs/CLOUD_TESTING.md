@@ -11,7 +11,7 @@ Any Linux VM works: DigitalOcean, Hetzner, AWS EC2, GCP Compute Engine, etc.
 ### 1. Install
 
 ```bash
-pip install clawmetry
+pip install clawlens
 ```
 
 ### 2. Point to your OpenClaw workspace
@@ -19,13 +19,13 @@ pip install clawmetry
 If OpenClaw runs on the same machine, the dashboard auto-detects everything:
 
 ```bash
-clawmetry --host 0.0.0.0 --port 8900
+clawlens --host 0.0.0.0 --port 8900
 ```
 
 If your OpenClaw workspace is on a different machine, mount or sync it, then:
 
 ```bash
-clawmetry --host 0.0.0.0 --workspace /path/to/openclaw/agent
+clawlens --host 0.0.0.0 --workspace /path/to/openclaw/agent
 ```
 
 ### 3. Secure access
@@ -86,15 +86,15 @@ Ideal if your OpenClaw metrics are sent via OTLP. Note: Cloud Run is stateless, 
 
 ```dockerfile
 FROM python:3.12-slim
-RUN pip install clawmetry[otel]
+RUN pip install clawlens[otel]
 EXPOSE 8900
-CMD ["clawmetry", "--host", "0.0.0.0", "--port", "8900", "--no-debug"]
+CMD ["clawlens", "--host", "0.0.0.0", "--port", "8900", "--no-debug"]
 ```
 
 ### 2. Deploy
 
 ```bash
-gcloud run deploy clawmetry \
+gcloud run deploy clawlens \
   --source . \
   --region us-central1 \
   --allow-unauthenticated \
@@ -109,7 +109,7 @@ Point your OpenClaw config at the Cloud Run URL:
 ```yaml
 diagnostics:
   otel:
-    endpoint: https://clawmetry-xxxxx.run.app
+    endpoint: https://clawlens-xxxxx.run.app
 ```
 
 The Usage tab and health checks will work. For full features, use a VM with the workspace mounted.
@@ -120,26 +120,26 @@ The Usage tab and health checks will work. For full features, use a VM with the 
 
 ```bash
 docker run -d \
-  --name clawmetry \
+  --name clawlens \
   -p 8900:8900 \
   -v /path/to/openclaw/agent:/workspace \
   python:3.12-slim \
-  bash -c "pip install clawmetry && clawmetry --host 0.0.0.0 --workspace /workspace --no-debug"
+  bash -c "pip install clawlens && clawlens --host 0.0.0.0 --workspace /workspace --no-debug"
 ```
 
 For a proper image, create a Dockerfile:
 
 ```dockerfile
 FROM python:3.12-slim
-RUN pip install clawmetry[otel]
+RUN pip install clawlens[otel]
 EXPOSE 8900
-ENTRYPOINT ["clawmetry"]
+ENTRYPOINT ["clawlens"]
 CMD ["--host", "0.0.0.0", "--no-debug"]
 ```
 
 ```bash
-docker build -t clawmetry .
-docker run -d -p 8900:8900 -v ~/openclaw-agent:/workspace clawmetry --workspace /workspace
+docker build -t clawlens .
+docker run -d -p 8900:8900 -v ~/openclaw-agent:/workspace clawlens --workspace /workspace
 ```
 
 ---
@@ -154,7 +154,7 @@ These platforms support Docker or Python buildpacks.
 {
   "build": { "builder": "NIXPACKS" },
   "deploy": {
-    "startCommand": "pip install clawmetry[otel] && clawmetry --host 0.0.0.0 --port $PORT --no-debug"
+    "startCommand": "pip install clawlens[otel] && clawlens --host 0.0.0.0 --port $PORT --no-debug"
   }
 }
 ```
@@ -172,7 +172,7 @@ fly launch --image python:3.12-slim
 If you just want cost/token dashboards without local file access, the dashboard works in "OTLP-only" mode:
 
 ```bash
-clawmetry --host 0.0.0.0 --no-debug
+clawlens --host 0.0.0.0 --no-debug
 # No workspace needed - just send OTLP data to it
 ```
 

@@ -1,10 +1,10 @@
 """
-ClawMetry History - Time-series data collection and storage.
+ClawLens History - Time-series data collection and storage.
 
 Collects snapshots from the OpenClaw gateway every 60s and stores them
 in a local SQLite database for historical analysis.
 
-Database: ~/.clawmetry/history.db (configurable via CLAWMETRY_HISTORY_DB)
+Database: ~/.clawlens/history.db (configurable via CLAWLENS_HISTORY_DB)
 """
 
 import os
@@ -16,17 +16,17 @@ from datetime import datetime, timezone, timedelta
 
 __all__ = ['HistoryDB', 'HistoryCollector']
 
-DEFAULT_DB_PATH = os.path.expanduser('~/.clawmetry/history.db')
+DEFAULT_DB_PATH = os.path.expanduser('~/.clawlens/history.db')
 POLL_INTERVAL = 60  # seconds
 RETENTION_DAYS = 90
 ROLLUP_AFTER_DAYS = 7  # aggregate into hourly after 7 days
 
 
 class HistoryDB:
-    """SQLite-backed time-series store for ClawMetry."""
+    """SQLite-backed time-series store for ClawLens."""
 
     def __init__(self, db_path=None):
-        self.db_path = db_path or os.environ.get('CLAWMETRY_HISTORY_DB', DEFAULT_DB_PATH)
+        self.db_path = db_path or os.environ.get('CLAWLENS_HISTORY_DB', DEFAULT_DB_PATH)
         os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
         self._local = threading.local()
         self._init_schema()

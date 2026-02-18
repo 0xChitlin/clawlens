@@ -1,17 +1,17 @@
-# clawmetry
+# clawlens
 
-`clawmetry` is the brand alias package for `openclaw-dashboard`.
+`clawlens` is the brand alias package for `openclaw-dashboard`.
 
 Install:
 
 ```bash
-pip install clawmetry
+pip install clawlens
 ```
 
 Run:
 
 ```bash
-clawmetry
+clawlens
 ```
 
 This package depends on `openclaw-dashboard` and exposes the same dashboard runtime.

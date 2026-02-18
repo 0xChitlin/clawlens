@@ -1,4 +1,4 @@
-"""Minimal Flask backend for ClawMetry landing - serves static files + email subscribe via Resend.
+"""Minimal Flask backend for ClawLens landing - serves static files + email subscribe via Resend.
 Includes admin panel for inbox, subscribers, copy events."""
 import os
 import re
@@ -16,20 +16,20 @@ import requests
 from flask import Flask, request, jsonify, send_from_directory, make_response, redirect, url_for, session, render_template_string
 
 app = Flask(__name__, static_folder=".", static_url_path="")
-app.secret_key = os.environ.get("SECRET_KEY", "clawmetry-secret-key-2026-xk9m")
+app.secret_key = os.environ.get("SECRET_KEY", "clawlens-secret-key-2026-xk9m")
 
 # Force logs to stdout for Cloud Run
 logging.basicConfig(stream=sys.stderr, level=logging.INFO)
-log = logging.getLogger("clawmetry")
+log = logging.getLogger("clawlens")
 
-ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "clawmetry-admin-2026")
-DB_PATH = "/tmp/clawmetry.db"
+ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "clawlens-admin-2026")
+DB_PATH = "/tmp/clawlens.db"
 
 RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "re_jWLL59fj_PBctxiwxDLFiWjBZ9MiJ4ems")
 RESEND_AUDIENCE_ID = os.environ.get("RESEND_AUDIENCE_ID", "48212e72-0d6c-489c-90c3-85a03a52d54c")
-FROM_EMAIL = "ClawMetry <hello@clawmetry.com>"
-UPDATES_EMAIL = "ClawMetry Updates <updates@clawmetry.com>"
-NOTIFY_SECRET = os.environ.get("NOTIFY_SECRET", "clawmetry-notify-2026")
+FROM_EMAIL = "ClawLens <hello@clawlens.com>"
+UPDATES_EMAIL = "ClawLens Updates <updates@clawlens.com>"
+NOTIFY_SECRET = os.environ.get("NOTIFY_SECRET", "clawlens-notify-2026")
 
 VIVEK_EMAIL = "vivekchand19@gmail.com"
 RESEND_HEADERS = {"Authorization": f"Bearer {RESEND_API_KEY}", "Content-Type": "application/json"}
@@ -109,7 +109,7 @@ ADMIN_BASE = """
 <html lang="en">
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>{{ title }} — ClawMetry Admin</title>
+<title>{{ title }} — ClawLens Admin</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
@@ -145,7 +145,7 @@ label{display:block;color:var(--muted);font-size:13px;margin-bottom:4px;margin-t
 </head>
 <body>
 <nav class="top-nav">
-  <span class="brand">🦞 ClawMetry</span>
+  <span class="brand">🦞 ClawLens</span>
   <a href="/admin" class="{{ 'active' if active=='dash' }}">Dashboard</a>
   <a href="/admin/inbox" class="{{ 'active' if active=='inbox' }}">Inbox</a>
   <a href="/admin/compose" class="{{ 'active' if active=='compose' }}">Compose</a>
@@ -166,7 +166,7 @@ label{display:block;color:var(--muted);font-size:13px;margin-bottom:4px;margin-t
 LOGIN_PAGE = """
 <!DOCTYPE html><html><head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Login — ClawMetry Admin</title>
+<title>Login — ClawLens Admin</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
@@ -178,7 +178,7 @@ button{width:100%;padding:12px;border-radius:8px;border:none;background:#E5443A;
 .err{color:#fca5a5;font-size:13px;margin-bottom:12px}
 </style></head><body>
 <div class="box">
-<h1>🦞 ClawMetry Admin</h1>
+<h1>🦞 ClawLens Admin</h1>
 {% if error %}<p class="err">{{ error }}</p>{% endif %}
 <form method="POST"><input type="password" name="password" placeholder="Password" autofocus><button type="submit">Login</button></form>
 </div></body></html>
@@ -190,18 +190,18 @@ WELCOME_HTML = """\
 <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;max-width:560px;margin:0 auto;color:#1a1a2e;">
   <div style="text-align:center;padding:32px 0 24px;">
     <span style="font-size:48px;">&#x1F99E;</span>
-    <h1 style="font-size:24px;margin:12px 0 0;">Welcome to ClawMetry</h1>
+    <h1 style="font-size:24px;margin:12px 0 0;">Welcome to ClawLens</h1>
   </div>
   <p>Thanks for subscribing! You're now on the list for release updates.</p>
-  <p><strong>What is ClawMetry?</strong><br>
+  <p><strong>What is ClawLens?</strong><br>
   A free, open-source real-time observability dashboard for AI agents. See token costs, cron jobs, sub-agents, memory files, and session history in one place.</p>
   <div style="background:#f4f4f8;border-radius:8px;padding:16px;margin:20px 0;font-family:'Courier New',monospace;font-size:14px;">
-    <span style="color:#888;">$</span> curl -fsSL https://clawmetry.com/install.sh | bash
+    <span style="color:#888;">$</span> curl -fsSL https://clawlens.com/install.sh | bash
   </div>
   <p>
-    <a href="https://github.com/vivekchand/clawmetry" style="color:#E5443A;">GitHub</a> |
-    <a href="https://pypi.org/project/clawmetry/" style="color:#E5443A;">PyPI</a> |
-    <a href="https://clawmetry.com" style="color:#E5443A;">Website</a>
+    <a href="https://github.com/0xChitlin/clawlens" style="color:#E5443A;">GitHub</a> |
+    <a href="https://pypi.org/project/clawlens/" style="color:#E5443A;">PyPI</a> |
+    <a href="https://clawlens.com" style="color:#E5443A;">Website</a>
   </p>
   <p style="color:#888;font-size:13px;margin-top:32px;border-top:1px solid #eee;padding-top:16px;">
     We'll email you on major releases only. No spam. Ever.
@@ -229,7 +229,7 @@ def _resend_get(path):
 def send_welcome_email(email):
     return _resend_post("/emails", {
         "from": FROM_EMAIL, "to": [email],
-        "subject": "Welcome to ClawMetry \U0001f99e", "html": WELCOME_HTML,
+        "subject": "Welcome to ClawLens \U0001f99e", "html": WELCOME_HTML,
     })
 
 
@@ -319,7 +319,7 @@ def subscribe():
         db.commit(); db.close()
 
         notify_vivek(
-            f"🦞 New ClawMetry subscriber: {email} [{source}]",
+            f"🦞 New ClawLens subscriber: {email} [{source}]",
             f"""<div style="font-family:sans-serif;max-width:500px;">
             <h2>New Subscriber!</h2>
             <p><strong>Email:</strong> {email}</p>
@@ -372,7 +372,7 @@ def notify():
     data = request.get_json(silent=True) or {}
     version = data.get("version", "")
     changes = data.get("changes", "")
-    subject = data.get("subject") or f"ClawMetry {version} released \U0001f680"
+    subject = data.get("subject") or f"ClawLens {version} released \U0001f680"
     if not version:
         return jsonify({"error": "version is required"}), 400
 
@@ -380,13 +380,13 @@ def notify():
     html = f"""\
 <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;max-width:560px;margin:0 auto;color:#1a1a2e;">
   <div style="text-align:center;padding:32px 0 24px;"><span style="font-size:48px;">&#x1F680;</span>
-    <h1 style="font-size:24px;margin:12px 0 0;">ClawMetry {version}</h1></div>
-  <p>A new version of ClawMetry is out!</p>
+    <h1 style="font-size:24px;margin:12px 0 0;">ClawLens {version}</h1></div>
+  <p>A new version of ClawLens is out!</p>
   {"<h3>What's new:</h3><ul>" + changes_html + "</ul>" if changes_html else ""}
   <div style="background:#f4f4f8;border-radius:8px;padding:16px;margin:20px 0;font-family:'Courier New',monospace;font-size:14px;">
-    <span style="color:#888;">$</span> pip install --upgrade clawmetry</div>
-  <p><a href="https://github.com/vivekchand/clawmetry/releases" style="color:#E5443A;">Release Notes</a> |
-    <a href="https://pypi.org/project/clawmetry/" style="color:#E5443A;">PyPI</a></p>
+    <span style="color:#888;">$</span> pip install --upgrade clawlens</div>
+  <p><a href="https://github.com/0xChitlin/clawlens/releases" style="color:#E5443A;">Release Notes</a> |
+    <a href="https://pypi.org/project/clawlens/" style="color:#E5443A;">PyPI</a></p>
 </div>"""
 
     contacts = get_all_contacts()
@@ -452,7 +452,7 @@ def webhook_email():
         <p><strong>To:</strong> {to_email}</p>
         <p><strong>Subject:</strong> {subject}</p>
         <hr><div>{body_html or body_text or '(empty)'}</div>
-        <p><a href="https://clawmetry.com/admin/inbox">View in Admin</a></p>
+        <p><a href="https://clawlens.com/admin/inbox">View in Admin</a></p>
         </div>"""
     )
 
@@ -527,7 +527,7 @@ def admin_inbox():
     db.close()
 
     if not emails:
-        html = '<h2 style="margin-bottom:20px">Inbox</h2><div class="card"><p class="empty">No emails received yet. Send one to hello@clawmetry.com!</p></div>'
+        html = '<h2 style="margin-bottom:20px">Inbox</h2><div class="card"><p class="empty">No emails received yet. Send one to hello@clawlens.com!</p></div>'
         return _render_admin("Inbox", html, "inbox")
 
     rows = ""

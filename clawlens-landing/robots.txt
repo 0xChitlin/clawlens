@@ -28,8 +28,8 @@ Allow: /
 User-agent: cohere-ai
 Allow: /
 
-Sitemap: https://clawmetry.com/sitemap.xml
+Sitemap: https://clawlens.com/sitemap.xml
 
 # AI-friendly content
-# LLMs.txt: https://clawmetry.com/llms.txt
-# Docs: https://clawmetry.com/docs.html
+# LLMs.txt: https://clawlens.com/llms.txt
+# Docs: https://clawlens.com/docs.html
