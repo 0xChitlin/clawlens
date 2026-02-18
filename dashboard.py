@@ -30,6 +30,7 @@ import threading
 import select
 from datetime import datetime, timezone, timedelta
 from flask import Flask, render_template_string, request, jsonify, Response, make_response
+import requests as _requests
 
 # History / time-series module
 try:
@@ -79,6 +80,17 @@ EXTRA_SERVICES = []  # List of {'name': str, 'port': int} from --monitor-service
 FLEET_API_KEY = os.environ.get("CLAWLENS_FLEET_KEY", "")
 FLEET_DB_PATH = None  # Set via CLI or auto-detected
 FLEET_NODE_TIMEOUT = 300  # seconds before node is considered offline
+
+# ── On-chain / $PINCH Config ────────────────────────────────────────────
+ERC8004_REGISTRY = "0x01949e45FabCD684bcD4747966145140aB4778E5"
+PINCH_TOKEN = "0xF8e86087dc452a52aA5d1bb66FaE56F869C33412"
+ABSTRACT_RPC = "https://api.mainnet.abs.xyz"
+KONA_V2_FACTORY = "0x7c2e370CA0fCb60D8202b8C5b01f758bcAD41860"
+WETH_ABSTRACT = "0x3439153eb7af838ad19d56e1571fbd09333c2809"
+PINCH_PRICE_ETH = 0.0  # cached ETH price of 1 PINCH
+_pinch_price_ts = 0.0  # last fetch timestamp
+_fleet_agents_cache = []  # cached agent list
+_fleet_agents_ts = 0.0  # last fetch timestamp
 
 # ── Budget & Alert Configuration ───────────────────────────────────────
 _budget_paused = False
