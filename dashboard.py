@@ -92,6 +92,16 @@ _pinch_price_ts = 0.0  # last fetch timestamp
 _fleet_agents_cache = []  # cached agent list
 _fleet_agents_ts = 0.0  # last fetch timestamp
 
+# ── Wallet Balance Config ───────────────────────────────────────────────
+DEPLOYER_ADDRESS = "0x00CC14AF7d9ce9Be4fdf9aE858632a00287edE11"
+TREASURY_ADDRESS = "0x8Ed51C7F0574442057631f9912CE7063AAAea75d"
+_wallet_balance_cache = None  # cached wallet balance data
+_wallet_balance_ts = 0.0  # last fetch timestamp
+last_wallet_alert_ts = 0.0  # last wallet balance alert timestamp (rate-limit: 1/hr)
+
+# ── Fleet Agent Status Tracking ─────────────────────────────────────────
+_fleet_agent_prev_statuses = {}  # tokenId -> active bool (for offline detection)
+
 # ── Budget & Alert Configuration ───────────────────────────────────────
 _budget_paused = False
 _budget_paused_at = 0
@@ -323,12 +333,29 @@ def _fleet_prune_metrics():
 
 
 def _fleet_maintenance_loop():
-    """Background thread: update statuses and prune old metrics."""
+    """Background thread: update statuses, prune old metrics, and alert on agent offline."""
+    global _fleet_agent_prev_statuses
     while True:
         time.sleep(300)  # every 5 minutes
         try:
             _fleet_update_statuses()
             _fleet_prune_metrics()
+            # Check ERC-8004 on-chain agents for status changes (active → inactive)
+            try:
+                agents = _fetch_fleet_agents_onchain()
+                for agent in agents:
+                    token_id = agent.get('tokenId')
+                    name = agent.get('name', f'agent-{token_id}')
+                    active = agent.get('active', True)
+                    prev_active = _fleet_agent_prev_statuses.get(token_id)
+                    # Only alert if we previously knew it was active and now it's not
+                    if prev_active is True and not active:
+                        _send_telegram_alert(
+                            f"\u26a0\ufe0f ClawLens: Agent {name} ({token_id}) went offline"
+                        )
+                    _fleet_agent_prev_statuses[token_id] = active
+            except Exception as e:
+                print(f"Warning: Fleet agent status check error: {e}")
         except Exception as e:
             print(f"Warning: Fleet maintenance error: {e}")
 
@@ -487,6 +514,68 @@ def _fetch_pinch_price():
 
     _pinch_price_ts = now
     return PINCH_PRICE_ETH
+
+
+def _fetch_wallet_balances():
+    """Fetch ETH balances for Deployer and Treasury wallets from Abstract mainnet RPC.
+    Caches for 30s. Alerts via Telegram if total < 0.0005 ETH (once per hour)."""
+    global _wallet_balance_cache, _wallet_balance_ts, last_wallet_alert_ts
+    import urllib.request as _ur
+    now = time.time()
+    # Return cached result if fresh
+    if _wallet_balance_cache is not None and (now - _wallet_balance_ts) < 30:
+        return _wallet_balance_cache
+
+    def _get_balance(address):
+        try:
+            payload = json.dumps({
+                "jsonrpc": "2.0",
+                "method": "eth_getBalance",
+                "params": [address, "latest"],
+                "id": 1,
+            }).encode()
+            req = _ur.Request(
+                ABSTRACT_RPC,
+                data=payload,
+                headers={"Content-Type": "application/json"},
+            )
+            with _ur.urlopen(req, timeout=10) as resp:
+                data = json.loads(resp.read())
+                hex_val = data.get("result", "0x0")
+                wei = int(hex_val, 16)
+                return wei / 1e18
+        except Exception:
+            return None
+
+    deployer_eth = _get_balance(DEPLOYER_ADDRESS)
+    treasury_eth = _get_balance(TREASURY_ADDRESS)
+
+    # Fall back to last cached value if fetch failed
+    if deployer_eth is None:
+        deployer_eth = (_wallet_balance_cache or {}).get("deployer", {}).get("eth", 0.0)
+    if treasury_eth is None:
+        treasury_eth = (_wallet_balance_cache or {}).get("treasury", {}).get("eth", 0.0)
+
+    total_eth = deployer_eth + treasury_eth
+    result = {
+        "deployer": {"address": DEPLOYER_ADDRESS, "eth": deployer_eth, "label": "Deployer"},
+        "treasury": {"address": TREASURY_ADDRESS, "eth": treasury_eth, "label": "Treasury"},
+        "total_eth": total_eth,
+    }
+    _wallet_balance_cache = result
+    _wallet_balance_ts = now
+
+    # Telegram alert if nearly empty (once per hour)
+    if total_eth < 0.0005 and (now - last_wallet_alert_ts) > 3600:
+        try:
+            _send_telegram_alert(
+                f"\U0001fa99 ClawLens: Deployer wallet nearly empty \u2014 {total_eth:.6f} ETH remaining"
+            )
+            last_wallet_alert_ts = now
+        except Exception:
+            pass
+
+    return result
 
 
 # ── Budget & Alert Database ────────────────────────────────────────────
@@ -868,6 +957,16 @@ def _budget_monitor_loop():
                         message=f'Spending anomaly: today ${daily_spent:.2f} is {(daily_spent/week_avg):.1f}x the 7-day average (${week_avg:.2f}/day)',
                         channels=['banner', 'telegram'],
                     )
+
+            # Monthly spend > $10 threshold alert
+            monthly_spent = status.get('monthly_spent', 0.0)
+            if monthly_spent > 10.0:
+                _fire_alert(
+                    rule_id='monthly_spend_10',
+                    alert_type='threshold',
+                    message=f'\U0001f4b8 ClawLens: Monthly spend ${monthly_spent:.2f} exceeded $10 threshold',
+                    channels=['banner', 'telegram'],
+                )
 
             # Custom alert rules
             rules = _get_alert_rules()
@@ -2560,6 +2659,46 @@ function clawlensLogout(){
   </div>
 
   <!-- old system health removed, now inside tasks pane -->
+
+  <!-- 💰 Wallet Balances Card -->
+  <div id="wallet-balances-card" style="background:var(--bg-secondary);border:1px solid var(--border-primary);border-radius:12px;padding:16px 20px;margin-top:14px;box-shadow:var(--card-shadow);">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+      <div style="font-size:14px;font-weight:700;color:var(--text-primary);">💰 Wallet Balances</div>
+      <span id="wallet-balances-warn" style="display:none;font-size:12px;color:#f59e0b;">⚠️ Nearly Empty</span>
+    </div>
+    <div style="display:flex;gap:24px;flex-wrap:wrap;">
+      <div>
+        <div style="font-size:11px;color:var(--text-muted);margin-bottom:2px;">Deployer</div>
+        <div id="wb-deployer-eth" style="font-size:18px;font-weight:700;color:var(--accent);font-family:'JetBrains Mono','Fira Code',monospace;">—</div>
+        <div id="wb-deployer-addr" style="font-size:10px;color:var(--text-faint);margin-top:2px;">Loading...</div>
+      </div>
+      <div>
+        <div style="font-size:11px;color:var(--text-muted);margin-bottom:2px;">Treasury</div>
+        <div id="wb-treasury-eth" style="font-size:18px;font-weight:700;color:var(--accent);font-family:'JetBrains Mono','Fira Code',monospace;">—</div>
+        <div id="wb-treasury-addr" style="font-size:10px;color:var(--text-faint);margin-top:2px;">Loading...</div>
+      </div>
+      <div style="margin-left:auto;text-align:right;">
+        <div style="font-size:11px;color:var(--text-muted);margin-bottom:2px;">Total</div>
+        <div id="wb-total-eth" style="font-size:20px;font-weight:800;color:var(--accent);font-family:'JetBrains Mono','Fira Code',monospace;">—</div>
+        <div style="font-size:10px;color:var(--text-faint);margin-top:2px;">Abstract Mainnet</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ⚠️ Emergency Controls (collapsible) -->
+  <div style="margin-top:14px;">
+    <details id="emergency-controls-details" style="background:var(--bg-secondary);border:1px solid #ff444433;border-radius:12px;padding:0;">
+      <summary style="cursor:pointer;padding:14px 20px;font-size:13px;font-weight:700;color:#ff6666;list-style:none;display:flex;align-items:center;gap:8px;">
+        <span>⚠️ Emergency Controls</span>
+        <span style="font-size:10px;color:var(--text-muted);font-weight:400;margin-left:4px;">click to expand</span>
+      </summary>
+      <div style="padding:0 20px 16px;">
+        <p style="font-size:12px;color:var(--text-muted);margin:8px 0 12px;">Use this to immediately stop the agent by restarting the OpenClaw gateway.</p>
+        <button onclick="killAgent()" style="background:#ff4444;color:white;border:none;padding:8px 16px;border-radius:6px;cursor:pointer;font-weight:600;font-size:13px;">🔴 Kill Agent</button>
+        <span id="kill-agent-result" style="margin-left:12px;font-size:12px;color:var(--text-muted);"></span>
+      </div>
+    </details>
+  </div>
 </div>
 
 <!-- USAGE -->
@@ -4823,6 +4962,34 @@ function toggleMsg(idx) {
   }
 }
 
+async function loadWalletBalances() {
+  try {
+    var data = await fetchJsonWithTimeout('/api/wallet-balances', 5000);
+    var fmt = function(eth) { return eth.toFixed(6) + ' ETH'; };
+    var el = function(id) { return document.getElementById(id); };
+    if (el('wb-deployer-eth')) el('wb-deployer-eth').textContent = fmt(data.deployer.eth || 0);
+    if (el('wb-deployer-addr')) el('wb-deployer-addr').textContent = (data.deployer.address || '').slice(0,10) + '...' + (data.deployer.address || '').slice(-6);
+    if (el('wb-treasury-eth')) el('wb-treasury-eth').textContent = fmt(data.treasury.eth || 0);
+    if (el('wb-treasury-addr')) el('wb-treasury-addr').textContent = (data.treasury.address || '').slice(0,10) + '...' + (data.treasury.address || '').slice(-6);
+    if (el('wb-total-eth')) el('wb-total-eth').textContent = fmt(data.total_eth || 0);
+    var warnEl = el('wallet-balances-warn');
+    if (warnEl) warnEl.style.display = (data.total_eth < 0.001) ? '' : 'none';
+  } catch(e) { /* silent fail — keep last value */ }
+}
+
+async function killAgent() {
+  if (!confirm('Are you sure? This will restart the OpenClaw gateway.')) return;
+  var resultEl = document.getElementById('kill-agent-result');
+  if (resultEl) resultEl.textContent = 'Sending...';
+  try {
+    var resp = await fetch('/api/kill-agent', {method: 'POST', headers: {'Content-Type': 'application/json'}});
+    var data = await resp.json();
+    if (resultEl) resultEl.textContent = data.message || (data.ok ? 'Done.' : 'Failed.');
+  } catch(e) {
+    if (resultEl) resultEl.textContent = 'Error: ' + e.message;
+  }
+}
+
 function startOverviewRefresh() {
   loadAll();
   if (window._overviewTimer) clearInterval(window._overviewTimer);
@@ -4830,6 +4997,10 @@ function startOverviewRefresh() {
   loadMainActivity();
   if (window._mainActivityTimer) clearInterval(window._mainActivityTimer);
   window._mainActivityTimer = setInterval(loadMainActivity, 5000);
+  // Wallet balances: load now and every 60s
+  loadWalletBalances();
+  if (window._walletBalancesTimer) clearInterval(window._walletBalancesTimer);
+  window._walletBalancesTimer = setInterval(loadWalletBalances, 60000);
 }
 
 async function loadMainActivity() {
@@ -11190,6 +11361,39 @@ def api_pinch_price():
         return jsonify({'priceEth': price_eth, 'priceUsd': price_usd})
     except Exception as e:
         return jsonify({'priceEth': 0.0, 'priceUsd': 0.0, 'error': str(e)})
+
+
+@app.route('/api/wallet-balances')
+def api_wallet_balances():
+    """Return live ETH balances for Deployer and Treasury wallets."""
+    try:
+        data = _fetch_wallet_balances()
+        return jsonify(data)
+    except Exception as e:
+        return jsonify({
+            'deployer': {'address': DEPLOYER_ADDRESS, 'eth': 0.0, 'label': 'Deployer'},
+            'treasury': {'address': TREASURY_ADDRESS, 'eth': 0.0, 'label': 'Treasury'},
+            'total_eth': 0.0,
+            'error': str(e),
+        })
+
+
+@app.route('/api/kill-agent', methods=['POST'])
+def api_kill_agent():
+    """Emergency kill switch: write KILLSWITCH file and restart the gateway."""
+    try:
+        # Write KILLSWITCH file with timestamp
+        kill_path = os.path.join(WORKSPACE or os.getcwd(), 'KILLSWITCH')
+        with open(kill_path, 'w') as f:
+            f.write(f'Kill switch activated at {datetime.now(timezone.utc).isoformat()}\n')
+        # Restart gateway (pauses agent)
+        try:
+            _gw_invoke('gateway', {'action': 'restart'})
+        except Exception:
+            pass
+        return jsonify({'ok': True, 'message': 'Kill switch activated'})
+    except Exception as e:
+        return jsonify({'ok': False, 'message': str(e)}), 500
 
 
 # ── Data Helpers ────────────────────────────────────────────────────────
