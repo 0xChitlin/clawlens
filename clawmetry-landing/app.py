@@ -1,12 +1,18 @@
 """Minimal Flask backend for ClawMetry landing - serves static files + email subscribe via Resend."""
 import os
 import re
+import logging
+import sys
 from datetime import datetime, timezone
 
 import requests
 from flask import Flask, request, jsonify, send_from_directory
 
 app = Flask(__name__, static_folder=".", static_url_path="")
+
+# Force logs to stdout for Cloud Run
+logging.basicConfig(stream=sys.stderr, level=logging.INFO)
+log = logging.getLogger("clawmetry")
 
 RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "re_jWLL59fj_PBctxiwxDLFiWjBZ9MiJ4ems")
 RESEND_AUDIENCE_ID = os.environ.get("RESEND_AUDIENCE_ID", "48212e72-0d6c-489c-90c3-85a03a52d54c")
@@ -86,7 +92,7 @@ def _get_visitor_info(req):
         if loc:
             location = loc
     except Exception as e:
-        print(f"[geo] Failed for {ip}: {e}")
+        log.info(f"[geo] Failed for {ip}: {e}")
     return {"ip": ip, "user_agent": ua, "referer": referer, "location": location or "Unknown"}
 
 
@@ -100,9 +106,9 @@ def notify_vivek(subject, body_html):
             "html": body_html,
         })
         if not ok:
-            print(f"[notify_vivek] Resend error: {resp}")
+            log.info(f"[notify_vivek] Resend error: {resp}")
     except Exception as e:
-        print(f"[notify_vivek] Exception: {e}")
+        log.info(f"[notify_vivek] Exception: {e}")
 
 
 def add_contact(email):
@@ -129,11 +135,14 @@ def subscribe():
     if not email or not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", email):
         return jsonify({"error": "Invalid email"}), 400
 
+    log.info(f"[subscribe] New subscription: {email}")
     ok, resp = add_contact(email)
     if not ok:
+        log.error(f"[subscribe] add_contact failed: {resp}")
         return jsonify({"error": "Failed to subscribe. Try again."}), 500
 
     send_welcome_email(email)
+    log.info(f"[subscribe] Welcome email sent to {email}")
 
     # Notify Vivek (best-effort, don't block response)
     try:
@@ -150,8 +159,9 @@ def subscribe():
             <p><strong>Time:</strong> {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}</p>
             </div>"""
         )
+        log.info(f"[subscribe] Notification sent to Vivek for {email}")
     except Exception as e:
-        print(f"[subscribe] Notify error: {e}")
+        log.error(f"[subscribe] Notify error: {e}", exc_info=True)
 
     return jsonify({"ok": True, "message": "Subscribed!"})
 
