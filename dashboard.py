@@ -10,6 +10,8 @@ Usage:
     clawlens --port 9000                 # Custom port
     clawlens --workspace ~/bot           # Custom workspace
     OPENCLAW_HOME=~/bot clawlens
+    clawlens --gateway https://clawworker.pokehunt-webhooks.workers.dev --token YOUR_TOKEN  # Remote agent
+    clawlens --gateway https://agent-001.workers.dev --token TOKEN --port 9000              # Remote + custom port
 
 https://github.com/0xChitlin/clawlens
 MIT License
@@ -11489,10 +11491,19 @@ def main():
     parser.add_argument('--mc-url', type=str, help='Mission Control URL (e.g. http://localhost:3002). Disabled by default.')
     parser.add_argument('--fleet-api-key', type=str, help='API key for multi-node fleet authentication. Also via CLAWLENS_FLEET_KEY env.')
     parser.add_argument('--fleet-db', type=str, help='Path to fleet SQLite database file.')
+    parser.add_argument('--gateway', '-g', type=str, help='Remote OpenClaw gateway URL (e.g. https://clawworker.workers.dev). Overrides auto-detect.')
+    parser.add_argument('--token', '-t', type=str, help='Bearer token for remote gateway auth.')
     parser.add_argument('--version', '-v', action='version', version=f'clawlens {__version__}')
 
     args = parser.parse_args()
     detect_config(args)
+
+    # Remote gateway override (--gateway / --token flags)
+    global GATEWAY_URL, GATEWAY_TOKEN
+    if args.gateway:
+        GATEWAY_URL = args.gateway.rstrip('/')
+    if args.token:
+        GATEWAY_TOKEN = args.token
 
     # Parse --monitor-service flags
     global EXTRA_SERVICES, MC_URL
