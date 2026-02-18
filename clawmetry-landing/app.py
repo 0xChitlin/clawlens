@@ -1,5 +1,4 @@
-"""Minimal Flask backend for ClawMetry landing - serves static files + email subscribe."""
-import json
+"""Minimal Flask backend for ClawMetry landing - serves static files + email subscribe via Resend."""
 import os
 import re
 from datetime import datetime, timezone
@@ -10,10 +9,14 @@ from flask import Flask, request, jsonify, send_from_directory
 app = Flask(__name__, static_folder=".", static_url_path="")
 
 RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "re_jWLL59fj_PBctxiwxDLFiWjBZ9MiJ4ems")
-SUBSCRIBERS_FILE = "/tmp/subscribers.json"
+RESEND_AUDIENCE_ID = os.environ.get("RESEND_AUDIENCE_ID", "48212e72-0d6c-489c-90c3-85a03a52d54c")
 FROM_EMAIL = "ClawMetry <hello@clawmetry.com>"
+UPDATES_EMAIL = "ClawMetry Updates <updates@clawmetry.com>"
+NOTIFY_SECRET = os.environ.get("NOTIFY_SECRET", "clawmetry-notify-2026")
 
-WELCOME_HTML = """
+RESEND_HEADERS = {"Authorization": f"Bearer {RESEND_API_KEY}", "Content-Type": "application/json"}
+
+WELCOME_HTML = """\
 <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;max-width:560px;margin:0 auto;color:#1a1a2e;">
   <div style="text-align:center;padding:32px 0 24px;">
     <span style="font-size:48px;">&#x1F99E;</span>
@@ -37,35 +40,48 @@ WELCOME_HTML = """
 """
 
 
-def load_subscribers():
+def _resend_post(path, payload):
+    """POST to Resend API, return (ok, data)."""
     try:
-        with open(SUBSCRIBERS_FILE) as f:
-            return json.load(f)
-    except (FileNotFoundError, json.JSONDecodeError):
-        return []
+        r = requests.post(f"https://api.resend.com{path}", headers=RESEND_HEADERS, json=payload, timeout=10)
+        return r.status_code in (200, 201), r.json() if r.content else {}
+    except Exception as e:
+        return False, {"error": str(e)}
 
 
-def save_subscribers(subs):
-    with open(SUBSCRIBERS_FILE, "w") as f:
-        json.dump(subs, f, indent=2)
+def _resend_get(path):
+    """GET from Resend API."""
+    try:
+        r = requests.get(f"https://api.resend.com{path}", headers=RESEND_HEADERS, timeout=10)
+        return r.json() if r.content else {}
+    except Exception:
+        return {}
 
 
 def send_welcome_email(email):
-    try:
-        resp = requests.post(
-            "https://api.resend.com/emails",
-            headers={"Authorization": f"Bearer {RESEND_API_KEY}"},
-            json={
-                "from": FROM_EMAIL,
-                "to": [email],
-                "subject": "Welcome to ClawMetry \U0001f99e",
-                "html": WELCOME_HTML,
-            },
-            timeout=10,
-        )
-        return resp.status_code in (200, 201)
-    except Exception:
-        return False
+    return _resend_post("/emails", {
+        "from": FROM_EMAIL,
+        "to": [email],
+        "subject": "Welcome to ClawMetry \U0001f99e",
+        "html": WELCOME_HTML,
+    })
+
+
+def add_contact(email):
+    """Add contact to Resend audience. Returns (ok, already_existed)."""
+    ok, data = _resend_post(f"/audiences/{RESEND_AUDIENCE_ID}/contacts", {
+        "email": email,
+        "unsubscribed": False,
+    })
+    # Resend returns the contact even if it already exists
+    return ok, data
+
+
+def get_all_contacts():
+    """Get all subscribed contacts from Resend audience."""
+    data = _resend_get(f"/audiences/{RESEND_AUDIENCE_ID}/contacts")
+    contacts = data.get("data", [])
+    return [c for c in contacts if not c.get("unsubscribed")]
 
 
 @app.route("/api/subscribe", methods=["POST"])
@@ -75,14 +91,86 @@ def subscribe():
     if not email or not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", email):
         return jsonify({"error": "Invalid email"}), 400
 
-    subs = load_subscribers()
-    if any(s["email"] == email for s in subs):
-        return jsonify({"ok": True, "message": "Already subscribed"})
+    ok, resp = add_contact(email)
+    if not ok:
+        return jsonify({"error": "Failed to subscribe. Try again."}), 500
 
-    subs.append({"email": email, "subscribedAt": datetime.now(timezone.utc).isoformat()})
-    save_subscribers(subs)
     send_welcome_email(email)
     return jsonify({"ok": True, "message": "Subscribed!"})
+
+
+@app.route("/api/notify", methods=["POST"])
+def notify():
+    """Send version bump notification to all subscribers.
+
+    POST /api/notify
+    Headers: X-Notify-Secret: <secret>
+    Body: {"version": "0.5.0", "changes": "- Feature X\\n- Fix Y", "subject": "optional custom subject"}
+    """
+    if request.headers.get("X-Notify-Secret") != NOTIFY_SECRET:
+        return jsonify({"error": "Unauthorized"}), 401
+
+    data = request.get_json(silent=True) or {}
+    version = data.get("version", "")
+    changes = data.get("changes", "")
+    subject = data.get("subject") or f"ClawMetry {version} released \U0001f680"
+
+    if not version:
+        return jsonify({"error": "version is required"}), 400
+
+    changes_html = "".join(f"<li>{line.lstrip('- ')}</li>" for line in changes.strip().split("\n") if line.strip())
+
+    html = f"""\
+<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;max-width:560px;margin:0 auto;color:#1a1a2e;">
+  <div style="text-align:center;padding:32px 0 24px;">
+    <span style="font-size:48px;">&#x1F680;</span>
+    <h1 style="font-size:24px;margin:12px 0 0;">ClawMetry {version}</h1>
+  </div>
+  <p>A new version of ClawMetry is out!</p>
+  {"<h3>What's new:</h3><ul>" + changes_html + "</ul>" if changes_html else ""}
+  <div style="background:#f4f4f8;border-radius:8px;padding:16px;margin:20px 0;font-family:'Courier New',monospace;font-size:14px;">
+    <span style="color:#888;">$</span> pip install --upgrade clawmetry
+  </div>
+  <p>
+    <a href="https://github.com/vivekchand/clawmetry/releases" style="color:#E5443A;">Release Notes</a> |
+    <a href="https://pypi.org/project/clawmetry/" style="color:#E5443A;">PyPI</a> |
+    <a href="https://clawmetry.com" style="color:#E5443A;">Website</a>
+  </p>
+  <p style="color:#888;font-size:13px;margin-top:32px;border-top:1px solid #eee;padding-top:16px;">
+    You're receiving this because you subscribed at clawmetry.com.
+  </p>
+</div>"""
+
+    contacts = get_all_contacts()
+    if not contacts:
+        return jsonify({"ok": True, "sent": 0, "message": "No subscribers yet"})
+
+    # Use Resend batch send
+    emails = [c["email"] for c in contacts]
+    sent = 0
+    errors = []
+    for email in emails:
+        ok, resp = _resend_post("/emails", {
+            "from": UPDATES_EMAIL,
+            "to": [email],
+            "subject": subject,
+            "html": html,
+        })
+        if ok:
+            sent += 1
+        else:
+            errors.append({"email": email, "error": resp})
+
+    return jsonify({"ok": True, "sent": sent, "total": len(emails), "errors": errors})
+
+
+@app.route("/api/subscribers", methods=["GET"])
+def list_subscribers():
+    """List subscriber count (protected)."""
+    if request.headers.get("X-Notify-Secret") != NOTIFY_SECRET:
+        return jsonify({"error": "Unauthorized"}), 401
+    contacts = get_all_contacts()
+    return jsonify({"count": len(contacts), "subscribers": [c["email"] for c in contacts]})
 
 
 @app.route("/")
