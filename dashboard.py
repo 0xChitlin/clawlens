@@ -339,6 +339,156 @@ def _start_fleet_maintenance_thread():
     t.start()
 
 
+# ── On-chain Helpers (Abstract Mainnet) ─────────────────────────────────
+
+def _eth_call(to, data, rpc=None):
+    """Make an eth_call to the given contract."""
+    if rpc is None:
+        rpc = ABSTRACT_RPC
+    try:
+        resp = _requests.post(rpc, json={
+            "jsonrpc": "2.0", "method": "eth_call",
+            "params": [{"to": to, "data": data}, "latest"],
+            "id": 1
+        }, timeout=10)
+        return resp.json().get("result", "0x")
+    except Exception:
+        return "0x"
+
+
+def _pad32(hex_int):
+    """Pad an integer to 32 bytes (64 hex chars)."""
+    return hex(hex_int)[2:].zfill(64)
+
+
+def _decode_address(hex_val):
+    """Extract an Ethereum address from a 32-byte hex return value."""
+    if not hex_val or hex_val == "0x":
+        return "0x0000000000000000000000000000000000000000"
+    raw = hex_val[2:] if hex_val.startswith("0x") else hex_val
+    # Take last 40 chars (20 bytes) of the 32-byte slot
+    return "0x" + raw[-40:].lower()
+
+
+def _decode_uint256(hex_val):
+    """Decode a uint256 from a 32-byte hex return value."""
+    if not hex_val or hex_val == "0x":
+        return 0
+    try:
+        return int(hex_val, 16)
+    except Exception:
+        return 0
+
+
+def _decode_string_from_abi(hex_val):
+    """Decode an ABI-encoded string from bytes."""
+    if not hex_val or hex_val == "0x" or len(hex_val) < 4:
+        return ""
+    try:
+        raw = hex_val[2:] if hex_val.startswith("0x") else hex_val
+        # ABI tuple: (address, string, uint, address, bool)
+        # offset to name string is at slot 1 (32 bytes in)
+        # name offset value is at bytes 32-64
+        name_offset = int(raw[64:128], 16) * 2  # in hex chars
+        name_len = int(raw[name_offset:name_offset + 64], 16)
+        name_hex = raw[name_offset + 64: name_offset + 64 + name_len * 2]
+        return bytes.fromhex(name_hex).decode('utf-8', errors='replace')
+    except Exception:
+        return ""
+
+
+def _fetch_fleet_agents_onchain():
+    """Fetch all registered agents from ERC-8004 registry on Abstract mainnet."""
+    global _fleet_agents_cache, _fleet_agents_ts
+    now = time.time()
+    # Cache for 60 seconds
+    if now - _fleet_agents_ts < 60 and _fleet_agents_cache:
+        return _fleet_agents_cache
+
+    agents = []
+    try:
+        # Get total supply
+        supply_hex = _eth_call(ERC8004_REGISTRY, "0x18160ddd")
+        total = _decode_uint256(supply_hex)
+        if total == 0 or total > 500:
+            total = min(total, 500)
+
+        for token_id in range(1, total + 1):
+            padded = _pad32(token_id)
+            # ownerOf(tokenId)
+            owner_hex = _eth_call(ERC8004_REGISTRY, "0x6352211e" + padded)
+            owner = _decode_address(owner_hex)
+            # getIdentity(tokenId) → (agentWallet, name, registeredAt, creator, active)
+            identity_hex = _eth_call(ERC8004_REGISTRY, "0x1a686502" + padded)
+            if identity_hex and identity_hex != "0x" and len(identity_hex) > 66:
+                raw = identity_hex[2:]
+                # Slot 0 = agentWallet (address)
+                agent_wallet = "0x" + raw[24:64].lower()
+                # Slot 1 = offset to name string
+                # Slot 2 = registeredAt (uint)
+                registered_at = int(raw[128:192], 16) if len(raw) >= 192 else 0
+                # Slot 3 = creator (address)
+                creator = "0x" + raw[216:256].lower() if len(raw) >= 256 else "0x"
+                # Slot 4 = active (bool)
+                active_slot = raw[256:320] if len(raw) >= 320 else ""
+                active = (int(active_slot, 16) != 0) if active_slot else True
+                # Decode name from dynamic string
+                name = _decode_string_from_abi(identity_hex)
+                agents.append({
+                    "tokenId": token_id,
+                    "name": name or f"agent-{token_id}",
+                    "owner": owner,
+                    "agentWallet": agent_wallet,
+                    "registeredAt": registered_at,
+                    "active": active,
+                })
+    except Exception as e:
+        pass  # Return empty list on failure
+
+    _fleet_agents_cache = agents
+    _fleet_agents_ts = now
+    return agents
+
+
+def _fetch_pinch_price():
+    """Fetch $PINCH price in ETH from Kona V2 on Abstract mainnet."""
+    global PINCH_PRICE_ETH, _pinch_price_ts
+    now = time.time()
+    # Cache for 5 minutes
+    if now - _pinch_price_ts < 300 and PINCH_PRICE_ETH > 0:
+        return PINCH_PRICE_ETH
+
+    try:
+        # ABI encode getAmountsOut(uint256 amountIn, address[] path)
+        # Function selector: keccak256("getAmountsOut(uint256,address[])") → 0xd06ca61f
+        # amountIn = 1e18 = 0xde0b6b3a7640000
+        amount_in = _pad32(10**18)
+        # path = [PINCH, WETH] as dynamic array
+        # offset to array = 0x40 (64 bytes)
+        path_offset = _pad32(64)
+        array_len = _pad32(2)
+        pinch_padded = _pad32(int(PINCH_TOKEN, 16))
+        weth_padded = _pad32(int(WETH_ABSTRACT, 16))
+        call_data = "0xd06ca61f" + amount_in + path_offset + array_len + pinch_padded + weth_padded
+        result_hex = _eth_call(KONA_V2_FACTORY, call_data)
+        if result_hex and result_hex != "0x" and len(result_hex) > 10:
+            raw = result_hex[2:]
+            # Returns uint256[] — offset at slot 0, length at slot 1, values at slot 2+
+            # We want index 1 (WETH amount for 1 PINCH)
+            if len(raw) >= 192:
+                weth_amount = int(raw[128:192], 16)
+                PINCH_PRICE_ETH = weth_amount / (10**18)
+            else:
+                PINCH_PRICE_ETH = 0.0
+        else:
+            PINCH_PRICE_ETH = 0.0
+    except Exception:
+        PINCH_PRICE_ETH = 0.0
+
+    _pinch_price_ts = now
+    return PINCH_PRICE_ETH
+
+
 # ── Budget & Alert Database ────────────────────────────────────────────
 
 def _budget_init_db():
@@ -2174,6 +2324,7 @@ function clawlensLogout(){
     <div class="nav-tab" onclick="switchTab('crons')">Crons</div>
     <div class="nav-tab" onclick="switchTab('memory')">Memory</div>
     <div class="nav-tab" onclick="switchTab('history')">History</div>
+    <div class="nav-tab" onclick="switchTab('fleet')">🤖 Fleet</div>
   </div>
 </div>
 
@@ -3041,6 +3192,7 @@ function switchTab(name) {
   if (name === 'transcripts') loadTranscripts();
   if (name === 'flow') initFlow();
   if (name === 'history') loadHistory();
+  if (name === 'fleet') loadFleet();
 }
 
 function exportUsageData() {
@@ -4489,12 +4641,26 @@ async function loadUsage() {
       chartHtml += '<div class="usage-bar-wrap"><div class="usage-bar" style="height:' + pct + '%"><div class="usage-bar-value">' + (d.tokens > 0 ? val : '') + '</div></div><div class="usage-bar-label">' + label + '</div></div>';
     });
     document.getElementById('usage-chart').innerHTML = chartHtml;
+    // Fetch PINCH price for cost display (non-blocking, best-effort)
+    var pinchEth = 0, ethUsdRate = 0;
+    try {
+      var pp2 = await fetch('/api/pinch-price').then(r => r.json());
+      pinchEth = pp2.priceEth || 0;
+      ethUsdRate = (pinchEth > 0 && pp2.priceUsd > 0) ? pp2.priceUsd / pinchEth : 0;
+    } catch(e) {}
+    function fmtPinch(usdCost) {
+      if (pinchEth <= 0 || ethUsdRate <= 0 || usdCost <= 0) return '';
+      var ethCost = usdCost / ethUsdRate;
+      var pinchAmt = ethCost / pinchEth;
+      if (pinchAmt < 0.001) return '';
+      return '<br><span style="color:#00ff87;font-size:11px;">≈ ' + pinchAmt.toFixed(2) + ' PINCH</span>';
+    }
     // Cost table
     var costLabel = data.source === 'otlp' ? 'Cost' : 'Est. Cost';
     var tableHtml = '<thead><tr><th>Period</th><th>Tokens</th><th>' + costLabel + '</th></tr></thead><tbody>';
-    tableHtml += '<tr><td>Today</td><td>' + fmtTokens(data.today) + '</td><td>' + fmtCost(data.todayCost) + '</td></tr>';
-    tableHtml += '<tr><td>This Week</td><td>' + fmtTokens(data.week) + '</td><td>' + fmtCost(data.weekCost) + '</td></tr>';
-    tableHtml += '<tr><td>This Month</td><td>' + fmtTokens(data.month) + '</td><td>' + fmtCost(data.monthCost) + '</td></tr>';
+    tableHtml += '<tr><td>Today</td><td>' + fmtTokens(data.today) + '</td><td>' + fmtCost(data.todayCost) + fmtPinch(data.todayCost) + '</td></tr>';
+    tableHtml += '<tr><td>This Week</td><td>' + fmtTokens(data.week) + '</td><td>' + fmtCost(data.weekCost) + fmtPinch(data.weekCost) + '</td></tr>';
+    tableHtml += '<tr><td>This Month</td><td>' + fmtTokens(data.month) + '</td><td>' + fmtCost(data.monthCost) + fmtPinch(data.monthCost) + '</td></tr>';
     tableHtml += '</tbody>';
     document.getElementById('usage-cost-table').innerHTML = tableHtml;
     // OTLP-specific sections
@@ -7060,6 +7226,65 @@ async function showSnapshot(ts) {
     console.error('Snapshot error:', e);
   }
 }
+
+// ===== Fleet: On-chain ERC-8004 Registry =====
+var _pinchPriceEth = 0;
+var _pinchPriceUsd = 0;
+
+async function loadFleet() {
+  var grid = document.getElementById('fleet-grid');
+  var statusEl = document.getElementById('fleet-status');
+  var badge = document.getElementById('fleet-count-badge');
+  if (!grid) return;
+  grid.innerHTML = '<div style="color:var(--text-muted);font-size:13px;padding:16px;">Fetching agents from Abstract Chain...</div>';
+  statusEl.textContent = '';
+  try {
+    // Fetch PINCH price in parallel
+    try {
+      var pp = await fetch('/api/pinch-price').then(r => r.json());
+      _pinchPriceEth = pp.priceEth || 0;
+      _pinchPriceUsd = pp.priceUsd || 0;
+    } catch(e) { _pinchPriceEth = 0; }
+
+    var agents = await fetch('/api/fleet-agents').then(r => r.json());
+    if (!Array.isArray(agents)) agents = [];
+
+    badge.textContent = agents.length + ' agents';
+    badge.style.display = agents.length > 0 ? '' : 'none';
+    statusEl.textContent = 'Abstract Mainnet · ERC-8004 Registry · ' + new Date().toLocaleTimeString();
+
+    if (agents.length === 0) {
+      grid.innerHTML = '<div style="color:var(--text-muted);font-size:13px;padding:32px;text-align:center;">No agents registered on-chain yet.<br><span style="font-size:11px;margin-top:8px;display:block;color:#555;">Registry: 0x01949e...8E5</span></div>';
+      return;
+    }
+
+    var html = '';
+    agents.forEach(function(a) {
+      var regDate = a.registeredAt ? new Date(a.registeredAt * 1000).toLocaleDateString() : '—';
+      var ownerShort = a.owner && a.owner.length > 10 ? a.owner.slice(0,6)+'…'+a.owner.slice(-4) : (a.owner||'—');
+      var walletShort = a.agentWallet && a.agentWallet.length > 10 ? a.agentWallet.slice(0,6)+'…'+a.agentWallet.slice(-4) : (a.agentWallet||'—');
+      var activeBadge = a.active
+        ? '<span style="background:#00ff87;color:#080810;border-radius:10px;padding:2px 8px;font-size:11px;font-weight:700;">Active</span>'
+        : '<span style="background:#333;color:#888;border-radius:10px;padding:2px 8px;font-size:11px;">Inactive</span>';
+      html += '<div style="background:#0e0e1a;border:1px solid #1e1e3a;border-radius:12px;padding:18px;position:relative;">';
+      html += '<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">';
+      html += '<div style="width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,#00ff87,#00b8ff);display:flex;align-items:center;justify-content:center;font-size:16px;">🤖</div>';
+      html += '<div><div style="font-weight:700;font-size:15px;color:#fff;">'+escHtml(a.name)+'</div>';
+      html += '<div style="font-size:11px;color:#555;">#'+a.tokenId+'</div></div>';
+      html += activeBadge+'</div>';
+      html += '<div style="font-size:12px;color:#888;line-height:1.8;">';
+      html += '<div><span style="color:#555;">Owner:</span> <span style="color:#aaa;font-family:monospace;">'+ownerShort+'</span></div>';
+      html += '<div><span style="color:#555;">Wallet:</span> <span style="color:#00ff87;font-family:monospace;">'+walletShort+'</span></div>';
+      html += '<div><span style="color:#555;">Registered:</span> <span style="color:#aaa;">'+regDate+'</span></div>';
+      html += '</div></div>';
+    });
+    grid.innerHTML = html;
+  } catch(e) {
+    grid.innerHTML = '<div style="color:#ef4444;font-size:13px;padding:16px;">Error loading fleet: ' + e.message + '</div>';
+    console.error('Fleet load error:', e);
+  }
+}
+
 </script>
 </div> <!-- end zoom-wrapper -->
 
@@ -7114,6 +7339,21 @@ async function showSnapshot(ts) {
       <span id="modal-event-count">—</span>
       <span id="modal-msg-count">—</span>
     </div>
+  </div>
+</div>
+
+<!-- FLEET -->
+<div class="page" id="page-fleet">
+  <div class="refresh-bar">
+    <button class="refresh-btn" onclick="loadFleet()">&#x21bb; Refresh</button>
+    <span id="fleet-status" style="font-size:12px;color:var(--text-muted);margin-left:8px;"></span>
+  </div>
+  <div class="section-title" style="display:flex;align-items:center;gap:8px;">
+    🤖 Registered .claw Agents
+    <span id="fleet-count-badge" style="display:none;background:#00ff87;color:#080810;border-radius:12px;padding:2px 10px;font-size:12px;font-weight:700;"></span>
+  </div>
+  <div id="fleet-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px;margin-top:8px;">
+    <div style="color:var(--text-muted);font-size:13px;padding:16px;">Loading agents from Abstract Chain...</div>
   </div>
 </div>
 
@@ -10916,6 +11156,40 @@ def api_automation_analysis():
             'error': str(e),
             'lastAnalysis': datetime.now(timezone.utc).isoformat()
         })
+
+
+# ── On-chain API Routes ─────────────────────────────────────────────────
+
+@app.route('/api/fleet-agents')
+def api_fleet_agents():
+    """Return all registered .claw agents from ERC-8004 registry on Abstract mainnet."""
+    try:
+        agents = _fetch_fleet_agents_onchain()
+        return jsonify(agents)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/pinch-price')
+def api_pinch_price():
+    """Return current $PINCH token price in ETH and USD."""
+    try:
+        price_eth = _fetch_pinch_price()
+        # Get ETH price in USD from overview data if available
+        eth_usd = 0.0
+        try:
+            from threading import Lock
+            # Try to get ETH price from existing metrics
+            for entry in list(metrics_store.get('cost', [])):
+                if entry.get('eth_price_usd'):
+                    eth_usd = entry['eth_price_usd']
+                    break
+        except Exception:
+            pass
+        price_usd = price_eth * eth_usd if eth_usd > 0 else 0.0
+        return jsonify({'priceEth': price_eth, 'priceUsd': price_usd})
+    except Exception as e:
+        return jsonify({'priceEth': 0.0, 'priceUsd': 0.0, 'error': str(e)})
 
 
 # ── Data Helpers ────────────────────────────────────────────────────────
