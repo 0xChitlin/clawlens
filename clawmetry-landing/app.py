@@ -97,6 +97,51 @@ def _get_visitor_info(req):
     return {"ip": ip, "user_agent": ua, "referer": referer, "location": location or "Unknown"}
 
 
+def _format_source(utm, referer):
+    """Determine traffic source from UTM params or referer."""
+    if not utm:
+        if referer and referer != "Direct":
+            return f"Referer: {referer}"
+        return "Direct / Unknown"
+
+    source = utm.get("utm_source", "")
+    medium = utm.get("utm_medium", "")
+    campaign = utm.get("utm_campaign", "")
+    gclid = utm.get("gclid", "")
+    gad = utm.get("gad_source", "")
+    fbclid = utm.get("fbclid", "")
+
+    if gclid or gad:
+        label = "Google Ads"
+        if campaign:
+            label += f" ({campaign})"
+        return label
+    if fbclid:
+        return "Facebook/Meta Ads"
+    if source:
+        parts = [source]
+        if medium:
+            parts.append(medium)
+        if campaign:
+            parts.append(campaign)
+        return " / ".join(parts)
+    return "Direct / Unknown"
+
+
+def _utm_html(utm):
+    """Render UTM params as HTML rows."""
+    if not utm:
+        return ""
+    rows = ""
+    for k, v in utm.items():
+        if k != "landing_url":
+            rows += f"<p><strong>{k}:</strong> {v}</p>"
+    landing = utm.get("landing_url", "")
+    if landing:
+        rows += f"<p><strong>Landing URL:</strong> <a href='{landing}'>{landing[:80]}</a></p>"
+    return rows
+
+
 def notify_vivek(subject, body_html):
     """Send a notification email to Vivek."""
     try:
@@ -151,15 +196,18 @@ def subscribe():
     # Notify Vivek (best-effort, don't block response)
     try:
         visitor = _get_visitor_info(request)
+        utm = data.get("utm", {})
+        source = _format_source(utm, visitor['referer'])
         notify_vivek(
-            f"🦞 New ClawMetry subscriber: {email}",
+            f"🦞 New ClawMetry subscriber: {email} [{source}]",
             f"""<div style="font-family:sans-serif;max-width:500px;">
             <h2>New Subscriber!</h2>
             <p><strong>Email:</strong> {email}</p>
+            <p style="font-size:18px;color:#E5443A;"><strong>Source:</strong> {source}</p>
             <p><strong>Location:</strong> {visitor['location']}</p>
             <p><strong>IP:</strong> {visitor['ip']}</p>
             <p><strong>Browser:</strong> {visitor['user_agent'][:120]}</p>
-            <p><strong>Referer:</strong> {visitor['referer']}</p>
+            {_utm_html(utm)}
             <p><strong>Time:</strong> {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}</p>
             </div>"""
         )
@@ -241,18 +289,21 @@ def copy_track():
     data = request.get_json(silent=True) or {}
     tab = data.get("tab", "unknown")
     command = data.get("command", "")
+    utm = data.get("utm", {})
     visitor = _get_visitor_info(request)
+    source = _format_source(utm, visitor['referer'])
 
     notify_vivek(
-        f"🦞 Someone copied ClawMetry install command ({tab})",
+        f"🦞 Install command copied ({tab}) [{source}]",
         f"""<div style="font-family:sans-serif;max-width:500px;">
         <h2>Install Command Copied!</h2>
         <p><strong>Tab:</strong> {tab}</p>
         <p><strong>Command:</strong> <code>{command}</code></p>
+        <p style="font-size:18px;color:#E5443A;"><strong>Source:</strong> {source}</p>
         <p><strong>Location:</strong> {visitor['location']}</p>
         <p><strong>IP:</strong> {visitor['ip']}</p>
         <p><strong>Browser:</strong> {visitor['user_agent'][:120]}</p>
-        <p><strong>Referer:</strong> {visitor['referer']}</p>
+        {_utm_html(utm)}
         <p><strong>Time:</strong> {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}</p>
         </div>"""
     )

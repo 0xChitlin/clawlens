@@ -509,7 +509,10 @@ function copyActiveCmd() {
   navigator.clipboard.writeText(cmds[activeTab]);
   if (typeof gtag === 'function') { gtag('event', 'ads_conversion_Sign_Up_1'); }
   // Notify backend about copy event
-  fetch('/api/copy-track', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({tab: activeTab, command: cmds[activeTab]})}).catch(function(){});
+  var copyData={tab: activeTab, command: cmds[activeTab]};
+  var utm=getUtmParams();
+  if(Object.keys(utm).length>1)copyData.utm=utm;
+  fetch('/api/copy-track', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(copyData)}).catch(function(){});
   var btn = document.getElementById('copy-btn');
   btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#28c840" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>';
   setTimeout(function(){ btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>'; }, 1500);
@@ -677,6 +680,15 @@ function copyActiveCmd() {
   <p id="sub-msg" style="margin-top:12px;font-size:13px;color:var(--text-muted);display:none;"></p>
 </section>
 <script>
+function getUtmParams(){
+  var p=new URLSearchParams(window.location.search);
+  var u={};
+  ['utm_source','utm_medium','utm_campaign','utm_term','utm_content','gclid','gad_source','gad_campaignid','fbclid'].forEach(function(k){
+    if(p.get(k))u[k]=p.get(k);
+  });
+  u.landing_url=window.location.href;
+  return u;
+}
 document.getElementById('subscribe-form').addEventListener('submit',function(e){
   e.preventDefault();
   var email=document.getElementById('sub-email').value;
@@ -686,7 +698,10 @@ document.getElementById('subscribe-form').addEventListener('submit',function(e){
   msg.style.color='var(--text-muted)';
   var btn=e.target.querySelector('button');
   btn.disabled=true;
-  fetch('/api/subscribe',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:email})}).then(function(r){return r.json();}).then(function(d){
+  var payload={email:email};
+  var utm=getUtmParams();
+  if(Object.keys(utm).length>1)payload.utm=utm;
+  fetch('/api/subscribe',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}).then(function(r){return r.json();}).then(function(d){
     msg.textContent=d.ok?'Thanks! We\'ll keep you posted. \u{1F99E}':'Something went wrong. Try again.';
     msg.style.color=d.ok?'#28c840':'#E5443A';
     if(d.ok)document.getElementById('sub-email').value='';
