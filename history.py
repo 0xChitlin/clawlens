@@ -1,418 +1,486 @@
 """
-ClawLens History - Time-series data collection and storage.
-
-Collects snapshots from the OpenClaw gateway every 60s and stores them
-in a local SQLite database for historical analysis.
-
-Database: ~/.clawlens/history.db (configurable via CLAWLENS_HISTORY_DB)
+history.py — SQLite time-series storage for ClawLens metrics, sessions, and crons.
+Provides HistoryDB (storage) and HistoryCollector (background collector thread).
 """
 
-import os
 import json
-import time
+import math
+import os
 import sqlite3
 import threading
-from datetime import datetime, timezone, timedelta
+import time
+from typing import Callable, Dict, List, Optional
 
-__all__ = ['HistoryDB', 'HistoryCollector']
 
-DEFAULT_DB_PATH = os.path.expanduser('~/.clawlens/history.db')
-POLL_INTERVAL = 60  # seconds
-RETENTION_DAYS = 90
-ROLLUP_AFTER_DAYS = 7  # aggregate into hourly after 7 days
-
+# ---------------------------------------------------------------------------
+# HistoryDB
+# ---------------------------------------------------------------------------
 
 class HistoryDB:
-    """SQLite-backed time-series store for ClawLens."""
+    """SQLite-backed storage for historical metrics, sessions, and cron data."""
 
-    def __init__(self, db_path=None):
-        self.db_path = db_path or os.environ.get('CLAWLENS_HISTORY_DB', DEFAULT_DB_PATH)
-        os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
-        self._local = threading.local()
-        self._init_schema()
+    DEFAULT_DB_PATH = os.path.expanduser("~/.clawlens-history.db")
 
-    def _get_conn(self):
-        if not hasattr(self._local, 'conn') or self._local.conn is None:
-            self._local.conn = sqlite3.connect(self.db_path, timeout=10)
-            self._local.conn.row_factory = sqlite3.Row
-            self._local.conn.execute('PRAGMA journal_mode=WAL')
-            self._local.conn.execute('PRAGMA synchronous=NORMAL')
-        return self._local.conn
+    def __init__(self, db_path: Optional[str] = None):
+        self.db_path = db_path or self.DEFAULT_DB_PATH
+        self._lock = threading.Lock()
+        self._conn = sqlite3.connect(
+            self.db_path,
+            check_same_thread=False,
+        )
+        self._init_db()
 
-    def _init_schema(self):
-        conn = self._get_conn()
-        conn.executescript('''
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
+
+    def _init_db(self):
+        """Create tables, indexes, and set PRAGMAs."""
+        c = self._conn.cursor()
+        c.executescript("""
+            PRAGMA journal_mode=WAL;
+            PRAGMA auto_vacuum=INCREMENTAL;
+
             CREATE TABLE IF NOT EXISTS metrics (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                timestamp REAL NOT NULL,
-                metric_name TEXT NOT NULL,
-                metric_value REAL NOT NULL,
-                labels_json TEXT DEFAULT '{}'
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                ts          REAL    NOT NULL,
+                metric      TEXT    NOT NULL,
+                value       REAL,
+                value_text  TEXT
             );
-            CREATE INDEX IF NOT EXISTS idx_metrics_ts ON metrics(timestamp);
-            CREATE INDEX IF NOT EXISTS idx_metrics_name_ts ON metrics(metric_name, timestamp);
+            CREATE INDEX IF NOT EXISTS idx_metrics_ts     ON metrics(ts);
+            CREATE INDEX IF NOT EXISTS idx_metrics_metric ON metrics(metric);
 
-            CREATE TABLE IF NOT EXISTS sessions_log (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                timestamp REAL NOT NULL,
-                session_key TEXT NOT NULL,
-                tokens_in INTEGER DEFAULT 0,
-                tokens_out INTEGER DEFAULT 0,
-                cost REAL DEFAULT 0,
-                model TEXT DEFAULT '',
-                status TEXT DEFAULT 'active',
-                extra_json TEXT DEFAULT '{}'
+            CREATE TABLE IF NOT EXISTS sessions (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                ts          REAL    NOT NULL,
+                session_key TEXT    NOT NULL,
+                data        TEXT    NOT NULL
             );
-            CREATE INDEX IF NOT EXISTS idx_sessions_ts ON sessions_log(timestamp);
-            CREATE INDEX IF NOT EXISTS idx_sessions_key ON sessions_log(session_key, timestamp);
+            CREATE INDEX IF NOT EXISTS idx_sessions_ts ON sessions(ts);
 
-            CREATE TABLE IF NOT EXISTS cron_runs (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                timestamp REAL NOT NULL,
-                job_id TEXT NOT NULL,
-                job_name TEXT DEFAULT '',
-                status TEXT DEFAULT 'unknown',
-                duration_ms INTEGER DEFAULT 0,
-                error TEXT DEFAULT '',
-                extra_json TEXT DEFAULT '{}'
+            CREATE TABLE IF NOT EXISTS crons (
+                id      INTEGER PRIMARY KEY AUTOINCREMENT,
+                ts      REAL    NOT NULL,
+                job_id  TEXT    NOT NULL,
+                data    TEXT    NOT NULL
             );
-            CREATE INDEX IF NOT EXISTS idx_cron_ts ON cron_runs(timestamp);
-            CREATE INDEX IF NOT EXISTS idx_cron_job ON cron_runs(job_id, timestamp);
+            CREATE INDEX IF NOT EXISTS idx_crons_ts ON crons(ts);
+        """)
+        self._conn.commit()
 
-            CREATE TABLE IF NOT EXISTS snapshots (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                timestamp REAL NOT NULL,
-                raw_json TEXT NOT NULL
-            );
-            CREATE INDEX IF NOT EXISTS idx_snapshots_ts ON snapshots(timestamp);
+    def _execute(self, sql: str, params: tuple = ()):
+        """Thread-safe write helper."""
+        with self._lock:
+            c = self._conn.cursor()
+            c.execute(sql, params)
+            self._conn.commit()
+            return c
 
-            CREATE TABLE IF NOT EXISTS metrics_rollup (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                timestamp REAL NOT NULL,
-                metric_name TEXT NOT NULL,
-                interval TEXT NOT NULL,
-                avg_value REAL,
-                min_value REAL,
-                max_value REAL,
-                sum_value REAL,
-                count INTEGER,
-                labels_json TEXT DEFAULT '{}'
-            );
-            CREATE INDEX IF NOT EXISTS idx_rollup_ts ON metrics_rollup(metric_name, interval, timestamp);
-        ''')
-        conn.commit()
+    # ------------------------------------------------------------------
+    # Metrics
+    # ------------------------------------------------------------------
 
-    def insert_metric(self, name, value, labels=None, ts=None):
-        ts = ts or time.time()
-        conn = self._get_conn()
-        conn.execute(
-            'INSERT INTO metrics (timestamp, metric_name, metric_value, labels_json) VALUES (?, ?, ?, ?)',
-            (ts, name, value, json.dumps(labels or {}))
-        )
-        conn.commit()
-
-    def insert_metrics_batch(self, rows):
-        """rows: list of (ts, name, value, labels_dict)"""
-        conn = self._get_conn()
-        conn.executemany(
-            'INSERT INTO metrics (timestamp, metric_name, metric_value, labels_json) VALUES (?, ?, ?, ?)',
-            [(ts, n, v, json.dumps(l or {})) for ts, n, v, l in rows]
-        )
-        conn.commit()
-
-    def insert_session(self, session_key, tokens_in, tokens_out, cost, model, status='active', ts=None, extra=None):
-        ts = ts or time.time()
-        conn = self._get_conn()
-        conn.execute(
-            'INSERT INTO sessions_log (timestamp, session_key, tokens_in, tokens_out, cost, model, status, extra_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-            (ts, session_key, tokens_in, tokens_out, cost, model, status, json.dumps(extra or {}))
-        )
-        conn.commit()
-
-    def insert_cron_run(self, job_id, job_name, status, duration_ms=0, error='', ts=None, extra=None):
-        ts = ts or time.time()
-        conn = self._get_conn()
-        conn.execute(
-            'INSERT INTO cron_runs (timestamp, job_id, job_name, status, duration_ms, error, extra_json) VALUES (?, ?, ?, ?, ?, ?, ?)',
-            (ts, job_id, job_name, status, duration_ms, error, json.dumps(extra or {}))
-        )
-        conn.commit()
-
-    def insert_snapshot(self, raw_data, ts=None):
-        ts = ts or time.time()
-        conn = self._get_conn()
-        conn.execute(
-            'INSERT INTO snapshots (timestamp, raw_json) VALUES (?, ?)',
-            (ts, json.dumps(raw_data) if isinstance(raw_data, dict) else raw_data)
-        )
-        conn.commit()
-
-    def query_metrics(self, metric_name, from_ts, to_ts, interval=None):
-        """Query metrics with optional time bucketing.
-        interval: 'minute', 'hour', 'day' or None for raw data.
+    def record_metrics(self, ts: float, data: dict):
         """
-        conn = self._get_conn()
+        Store a metrics snapshot keyed by metric name.
 
-        if interval and interval in ('minute', 'hour', 'day'):
-            divisor = {'minute': 60, 'hour': 3600, 'day': 86400}[interval]
-            rows = conn.execute('''
-                SELECT CAST(timestamp / ? AS INTEGER) * ? as bucket_ts,
-                       AVG(metric_value) as avg_val,
-                       MIN(metric_value) as min_val,
-                       MAX(metric_value) as max_val,
-                       SUM(metric_value) as sum_val,
-                       COUNT(*) as cnt
-                FROM metrics
-                WHERE metric_name = ? AND timestamp >= ? AND timestamp <= ?
-                GROUP BY bucket_ts
-                ORDER BY bucket_ts
-            ''', (divisor, divisor, metric_name, from_ts, to_ts)).fetchall()
-            return [dict(r) for r in rows]
-        else:
-            rows = conn.execute('''
-                SELECT timestamp, metric_value, labels_json
-                FROM metrics
-                WHERE metric_name = ? AND timestamp >= ? AND timestamp <= ?
-                ORDER BY timestamp
-            ''', (metric_name, from_ts, to_ts)).fetchall()
-            return [dict(r) for r in rows]
+        `data` can be:
+          - {"cost_total": 1.23, "tokens_in_total": 500, ...}  — numeric metrics
+          - a plain string key like "snapshot" with a JSON string value
+            (detected when called as record_metrics("snapshot", json_str))
 
-    def query_sessions(self, from_ts, to_ts, session_key=None):
-        conn = self._get_conn()
-        if session_key:
-            rows = conn.execute('''
-                SELECT * FROM sessions_log
-                WHERE timestamp >= ? AND timestamp <= ? AND session_key = ?
-                ORDER BY timestamp
-            ''', (from_ts, to_ts, session_key)).fetchall()
-        else:
-            rows = conn.execute('''
-                SELECT * FROM sessions_log
-                WHERE timestamp >= ? AND timestamp <= ?
-                ORDER BY timestamp
-            ''', (from_ts, to_ts)).fetchall()
-        return [dict(r) for r in rows]
+        To support the collector calling record_metrics(ts, dict) and also
+        record_metrics("snapshot", json_str), we detect the calling pattern.
+        """
+        # Detect the alternate signature: record_metrics(metric_name_str, value_str)
+        # This happens when the collector does record_metrics("snapshot", json.dumps(...))
+        if isinstance(ts, str):
+            metric_name = ts
+            raw = data
+            now = time.time()
+            if isinstance(raw, (int, float)):
+                self._execute(
+                    "INSERT INTO metrics (ts, metric, value, value_text) VALUES (?, ?, ?, NULL)",
+                    (now, metric_name, float(raw)),
+                )
+            else:
+                self._execute(
+                    "INSERT INTO metrics (ts, metric, value, value_text) VALUES (?, ?, NULL, ?)",
+                    (now, metric_name, str(raw)),
+                )
+            return
 
-    def query_crons(self, from_ts, to_ts, job_id=None):
-        conn = self._get_conn()
-        if job_id:
-            rows = conn.execute('''
-                SELECT * FROM cron_runs
-                WHERE timestamp >= ? AND timestamp <= ? AND job_id = ?
-                ORDER BY timestamp
-            ''', (from_ts, to_ts, job_id)).fetchall()
-        else:
-            rows = conn.execute('''
-                SELECT * FROM cron_runs
-                WHERE timestamp >= ? AND timestamp <= ?
-                ORDER BY timestamp
-            ''', (from_ts, to_ts)).fetchall()
-        return [dict(r) for r in rows]
+        # Normal signature: record_metrics(ts: float, data: dict)
+        with self._lock:
+            c = self._conn.cursor()
+            for metric, value in data.items():
+                if isinstance(value, (int, float)):
+                    c.execute(
+                        "INSERT INTO metrics (ts, metric, value, value_text) VALUES (?, ?, ?, NULL)",
+                        (ts, metric, float(value)),
+                    )
+                else:
+                    c.execute(
+                        "INSERT INTO metrics (ts, metric, value, value_text) VALUES (?, ?, NULL, ?)",
+                        (ts, metric, str(value)),
+                    )
+            self._conn.commit()
 
-    def query_snapshot(self, timestamp):
-        """Get the snapshot closest to a given timestamp."""
-        conn = self._get_conn()
-        row = conn.execute('''
-            SELECT * FROM snapshots
-            ORDER BY ABS(timestamp - ?) LIMIT 1
-        ''', (timestamp,)).fetchone()
-        if row:
-            d = dict(row)
-            try:
-                d['raw_json'] = json.loads(d['raw_json'])
-            except (json.JSONDecodeError, TypeError):
-                pass
-            return d
-        return None
+    def query_metrics(
+        self,
+        metric: str,
+        from_ts: float,
+        to_ts: float,
+        interval: int = 300,
+    ) -> Dict:
+        """
+        Return time-bucketed average values for a metric.
 
-    def get_available_metrics(self):
-        """List all distinct metric names."""
-        conn = self._get_conn()
-        rows = conn.execute('SELECT DISTINCT metric_name FROM metrics ORDER BY metric_name').fetchall()
-        return [r['metric_name'] for r in rows]
+        Buckets rows by floor(ts / interval) * interval and returns the
+        average numeric value per bucket.
 
-    def get_stats(self):
-        """DB stats for debugging."""
-        conn = self._get_conn()
-        stats = {}
-        for table in ['metrics', 'sessions_log', 'cron_runs', 'snapshots']:
-            row = conn.execute(f'SELECT COUNT(*) as cnt, MIN(timestamp) as oldest, MAX(timestamp) as newest FROM {table}').fetchone()
-            stats[table] = dict(row)
-        return stats
-
-    def cleanup(self, retention_days=None):
-        """Delete data older than retention_days and create rollups."""
-        retention_days = retention_days or RETENTION_DAYS
-        cutoff = time.time() - (retention_days * 86400)
-        rollup_cutoff = time.time() - (ROLLUP_AFTER_DAYS * 86400)
-        conn = self._get_conn()
-
-        # Create hourly rollups for data older than ROLLUP_AFTER_DAYS
-        conn.execute('''
-            INSERT OR IGNORE INTO metrics_rollup (timestamp, metric_name, interval, avg_value, min_value, max_value, sum_value, count, labels_json)
-            SELECT CAST(timestamp / 3600 AS INTEGER) * 3600, metric_name, 'hour',
-                   AVG(metric_value), MIN(metric_value), MAX(metric_value), SUM(metric_value), COUNT(*), '{}'
+        Returns: {"points": [[bucket_ts, avg_val], ...]} sorted by ts.
+        """
+        c = self._conn.cursor()
+        c.execute(
+            """
+            SELECT
+                CAST(FLOOR(ts / ?) * ? AS REAL) AS bucket,
+                AVG(value) AS avg_val
             FROM metrics
-            WHERE timestamp < ?
-            GROUP BY CAST(timestamp / 3600 AS INTEGER) * 3600, metric_name
-        ''', (rollup_cutoff,))
+            WHERE metric = ?
+              AND ts >= ?
+              AND ts <= ?
+              AND value IS NOT NULL
+            GROUP BY bucket
+            ORDER BY bucket ASC
+            """,
+            (interval, interval, metric, from_ts, to_ts),
+        )
+        rows = c.fetchall()
+        points = [[row[0], row[1]] for row in rows if row[1] is not None]
+        return {"points": points}
 
-        # Delete old raw data
-        for table in ['metrics', 'sessions_log', 'cron_runs', 'snapshots']:
-            conn.execute(f'DELETE FROM {table} WHERE timestamp < ?', (cutoff,))
+    def get_available_metrics(self) -> Dict:
+        """Return distinct metric names stored in the DB."""
+        c = self._conn.cursor()
+        c.execute("SELECT DISTINCT metric FROM metrics ORDER BY metric ASC")
+        rows = c.fetchall()
+        return {"metrics": [r[0] for r in rows]}
 
-        # Delete old rollups
-        conn.execute('DELETE FROM metrics_rollup WHERE timestamp < ?', (cutoff,))
+    # ------------------------------------------------------------------
+    # Sessions
+    # ------------------------------------------------------------------
 
-        conn.commit()
-        conn.execute('PRAGMA optimize')
+    def record_session(self, ts: float, session_key: str, data: dict):
+        """Store a session snapshot."""
+        self._execute(
+            "INSERT INTO sessions (ts, session_key, data) VALUES (?, ?, ?)",
+            (ts, session_key, json.dumps(data)),
+        )
 
+    def query_sessions(
+        self,
+        from_ts: float,
+        to_ts: float,
+        session_key: Optional[str] = None,
+    ) -> Dict:
+        """
+        Return session history in the given time range.
+        Optionally filter by session_key.
+        """
+        c = self._conn.cursor()
+        if session_key:
+            c.execute(
+                """
+                SELECT ts, session_key, data FROM sessions
+                WHERE ts >= ? AND ts <= ? AND session_key = ?
+                ORDER BY ts ASC
+                """,
+                (from_ts, to_ts, session_key),
+            )
+        else:
+            c.execute(
+                """
+                SELECT ts, session_key, data FROM sessions
+                WHERE ts >= ? AND ts <= ?
+                ORDER BY ts ASC
+                """,
+                (from_ts, to_ts),
+            )
+        rows = c.fetchall()
+        sessions = []
+        for row in rows:
+            try:
+                d = json.loads(row[2])
+            except (json.JSONDecodeError, TypeError):
+                d = {"raw": row[2]}
+            d["_ts"] = row[0]
+            d["_session_key"] = row[1]
+            sessions.append(d)
+        return {"sessions": sessions}
+
+    # ------------------------------------------------------------------
+    # Crons
+    # ------------------------------------------------------------------
+
+    def record_cron(self, ts: float, job_id: str, data: dict):
+        """Store a cron run record."""
+        self._execute(
+            "INSERT INTO crons (ts, job_id, data) VALUES (?, ?, ?)",
+            (ts, job_id, json.dumps(data)),
+        )
+
+    def query_crons(
+        self,
+        from_ts: float,
+        to_ts: float,
+        job_id: Optional[str] = None,
+    ) -> Dict:
+        """
+        Return cron history in the given time range.
+        Optionally filter by job_id.
+        """
+        c = self._conn.cursor()
+        if job_id:
+            c.execute(
+                """
+                SELECT ts, job_id, data FROM crons
+                WHERE ts >= ? AND ts <= ? AND job_id = ?
+                ORDER BY ts ASC
+                """,
+                (from_ts, to_ts, job_id),
+            )
+        else:
+            c.execute(
+                """
+                SELECT ts, job_id, data FROM crons
+                WHERE ts >= ? AND ts <= ?
+                ORDER BY ts ASC
+                """,
+                (from_ts, to_ts),
+            )
+        rows = c.fetchall()
+        crons = []
+        for row in rows:
+            try:
+                d = json.loads(row[2])
+            except (json.JSONDecodeError, TypeError):
+                d = {"raw": row[2]}
+            d["_ts"] = row[0]
+            d["_job_id"] = row[1]
+            crons.append(d)
+        return {"crons": crons}
+
+    # ------------------------------------------------------------------
+    # Snapshots
+    # ------------------------------------------------------------------
+
+    def query_snapshot(self, timestamp: float) -> Dict:
+        """
+        Find the snapshot row in metrics closest to the given timestamp.
+        Parses value_text as JSON and returns it.
+        """
+        c = self._conn.cursor()
+        c.execute(
+            """
+            SELECT value_text FROM metrics
+            WHERE metric = 'snapshot' AND value_text IS NOT NULL
+            ORDER BY ABS(ts - ?) ASC
+            LIMIT 1
+            """,
+            (timestamp,),
+        )
+        row = c.fetchone()
+        if not row:
+            return {"snapshot": {}}
+        try:
+            snapshot = json.loads(row[0])
+        except (json.JSONDecodeError, TypeError):
+            snapshot = {"raw": row[0]}
+        return {"snapshot": snapshot}
+
+    # ------------------------------------------------------------------
+    # Stats
+    # ------------------------------------------------------------------
+
+    def get_stats(self) -> Dict:
+        """Return overall DB statistics."""
+        c = self._conn.cursor()
+        c.execute("SELECT COUNT(*), MIN(ts), MAX(ts) FROM metrics")
+        row = c.fetchone()
+        total_points = row[0] or 0
+        oldest_ts = row[1] or 0.0
+        newest_ts = row[2] or 0.0
+
+        try:
+            db_size_bytes = os.path.getsize(self.db_path)
+        except OSError:
+            db_size_bytes = 0
+
+        return {
+            "total_points": total_points,
+            "oldest_ts": oldest_ts,
+            "newest_ts": newest_ts,
+            "db_size_bytes": db_size_bytes,
+        }
+
+    # ------------------------------------------------------------------
+    # Lifecycle
+    # ------------------------------------------------------------------
+
+    def close(self):
+        """Close the database connection."""
+        try:
+            self._conn.close()
+        except Exception:
+            pass
+
+
+# ---------------------------------------------------------------------------
+# HistoryCollector
+# ---------------------------------------------------------------------------
 
 class HistoryCollector:
-    """Background thread that polls the gateway and stores snapshots."""
+    """
+    Background daemon thread that periodically collects metrics from the
+    OpenClaw gateway and stores them in HistoryDB.
 
-    def __init__(self, db, gw_invoke_fn, interval=POLL_INTERVAL):
-        self.db = db
-        self._gw_invoke = gw_invoke_fn
-        self.interval = interval
-        self._stop = threading.Event()
-        self._thread = None
-        self._last_session_tokens = {}  # session_key -> last_total_tokens
-        self._last_cron_runs = {}  # job_id -> set of run timestamps seen
-        self._cleanup_counter = 0
+    Collects every 60 seconds:
+      - session_status  → cost_total, tokens_in_total, tokens_out_total
+      - sessions_list   → sessions_active count
+      - cron list       → cron states
+      - full snapshot   → all collected data as JSON in metrics("snapshot")
+    """
+
+    INTERVAL = 60  # seconds between collections
+
+    def __init__(self, db: HistoryDB, gw_invoke: Callable):
+        self._db = db
+        self._gw_invoke = gw_invoke
+        self._stop_event = threading.Event()
+        self._thread: Optional[threading.Thread] = None
+
+    # ------------------------------------------------------------------
+    # Lifecycle
+    # ------------------------------------------------------------------
 
     def start(self):
+        """Start the background collector thread (daemon)."""
         if self._thread and self._thread.is_alive():
-            return
-        self._thread = threading.Thread(target=self._run, daemon=True, name='history-collector')
+            return  # already running
+        self._stop_event.clear()
+        self._thread = threading.Thread(
+            target=self._run,
+            name="HistoryCollector",
+            daemon=True,
+        )
         self._thread.start()
 
     def stop(self):
-        self._stop.set()
+        """Signal the collector thread to stop."""
+        self._stop_event.set()
         if self._thread:
             self._thread.join(timeout=5)
 
+    # ------------------------------------------------------------------
+    # Collection loop
+    # ------------------------------------------------------------------
+
     def _run(self):
-        # Initial delay to let the app start
-        self._stop.wait(10)
-        while not self._stop.is_set():
+        """Main loop: collect immediately, then every INTERVAL seconds."""
+        while not self._stop_event.is_set():
             try:
                 self._collect()
-            except Exception as e:
-                print(f"[history] Collection error: {e}")
-            # Periodic cleanup every ~60 cycles (1 hour)
-            self._cleanup_counter += 1
-            if self._cleanup_counter >= 60:
-                try:
-                    self.db.cleanup()
-                except Exception as e:
-                    print(f"[history] Cleanup error: {e}")
-                self._cleanup_counter = 0
-            self._stop.wait(self.interval)
+            except Exception:
+                pass  # never crash the thread
+            # Sleep in short increments so stop() is responsive
+            for _ in range(self.INTERVAL * 10):
+                if self._stop_event.is_set():
+                    return
+                time.sleep(0.1)
 
     def _collect(self):
-        ts = time.time()
-        snapshot = {}
+        """Perform one collection cycle."""
+        now = time.time()
+        all_data: Dict = {}
 
-        # Collect sessions
-        sessions_data = self._gw_invoke('sessions_list', {'limit': 100, 'messageLimit': 0})
-        if sessions_data and 'sessions' in sessions_data:
-            sessions = sessions_data['sessions']
-            snapshot['sessions'] = sessions
+        # --- session_status ---
+        try:
+            status = self._gw_invoke("session_status", {})
+            if isinstance(status, dict):
+                cost = self._safe_float(status.get("cost_total"))
+                tok_in = self._safe_float(status.get("tokens_in_total"))
+                tok_out = self._safe_float(status.get("tokens_out_total"))
 
-            total_tokens_in = 0
-            total_tokens_out = 0
-            total_cost = 0
-            active_count = 0
+                metrics_data: Dict = {}
+                if cost is not None:
+                    metrics_data["cost_total"] = cost
+                if tok_in is not None:
+                    metrics_data["tokens_in_total"] = tok_in
+                if tok_out is not None:
+                    metrics_data["tokens_out_total"] = tok_out
 
-            for s in sessions:
-                key = s.get('key', s.get('sessionId', 'unknown'))
-                tokens_in = s.get('inputTokens', s.get('tokensIn', 0)) or 0
-                tokens_out = s.get('outputTokens', s.get('tokensOut', 0)) or 0
-                cost = s.get('totalCost', s.get('cost', 0)) or 0
-                model = s.get('model', '')
-                total = tokens_in + tokens_out
+                if metrics_data:
+                    self._db.record_metrics(now, metrics_data)
 
-                total_tokens_in += tokens_in
-                total_tokens_out += tokens_out
-                total_cost += cost
+                all_data["session_status"] = status
+        except Exception:
+            pass
 
-                # Check if session is active (updated in last 5 min)
-                updated = s.get('updatedAt', '')
-                if updated:
-                    try:
-                        if isinstance(updated, str):
-                            ut = datetime.fromisoformat(updated.replace('Z', '+00:00')).timestamp()
-                        else:
-                            ut = updated / 1000 if updated > 1e12 else updated
-                        if ts - ut < 300:
-                            active_count += 1
-                    except (ValueError, TypeError):
-                        pass
+        # --- sessions_list → sessions_active count ---
+        try:
+            sessions_resp = self._gw_invoke(
+                "sessions_list", {"limit": 50, "messageLimit": 0}
+            )
+            if isinstance(sessions_resp, dict):
+                sessions = sessions_resp.get("sessions", [])
+                if isinstance(sessions, list):
+                    active_count = len(sessions)
+                    self._db.record_metrics(now, {"sessions_active": float(active_count)})
+                    all_data["sessions_list"] = sessions_resp
+        except Exception:
+            pass
 
-                # Log session snapshot
-                self.db.insert_session(key, tokens_in, tokens_out, cost, model, 'active', ts)
+        # --- cron list ---
+        try:
+            cron_resp = self._gw_invoke("cron", {"action": "list"})
+            if isinstance(cron_resp, dict):
+                jobs = cron_resp.get("jobs", cron_resp.get("crons", []))
+                if isinstance(jobs, list):
+                    for job in jobs:
+                        if not isinstance(job, dict):
+                            continue
+                        job_id = job.get("id") or job.get("name") or "unknown"
+                        # Record cron if it has a recent lastRun
+                        last_run = job.get("lastRun") or job.get("last_run")
+                        if last_run:
+                            try:
+                                last_ts = float(last_run) / 1000 if float(last_run) > 1e10 else float(last_run)
+                            except (TypeError, ValueError):
+                                last_ts = now
+                            self._db.record_cron(last_ts, str(job_id), job)
+                all_data["cron"] = cron_resp
+        except Exception:
+            pass
 
-            # Aggregate metrics
-            metrics_batch = [
-                (ts, 'tokens_in_total', total_tokens_in, {}),
-                (ts, 'tokens_out_total', total_tokens_out, {}),
-                (ts, 'cost_total', total_cost, {}),
-                (ts, 'sessions_active', active_count, {}),
-                (ts, 'sessions_count', len(sessions), {}),
-            ]
+        # --- full snapshot ---
+        try:
+            snapshot_json = json.dumps(all_data)
+            self._db._execute(
+                "INSERT INTO metrics (ts, metric, value, value_text) VALUES (?, 'snapshot', NULL, ?)",
+                (now, snapshot_json),
+            )
+        except Exception:
+            pass
 
-            # Per-model breakdown
-            by_model = {}
-            for s in sessions:
-                m = s.get('model', 'unknown')
-                if m not in by_model:
-                    by_model[m] = {'tokens_in': 0, 'tokens_out': 0, 'cost': 0}
-                by_model[m]['tokens_in'] += s.get('inputTokens', s.get('tokensIn', 0)) or 0
-                by_model[m]['tokens_out'] += s.get('outputTokens', s.get('tokensOut', 0)) or 0
-                by_model[m]['cost'] += s.get('totalCost', s.get('cost', 0)) or 0
-
-            for model, vals in by_model.items():
-                metrics_batch.append((ts, 'tokens_in_by_model', vals['tokens_in'], {'model': model}))
-                metrics_batch.append((ts, 'tokens_out_by_model', vals['tokens_out'], {'model': model}))
-                metrics_batch.append((ts, 'cost_by_model', vals['cost'], {'model': model}))
-
-            self.db.insert_metrics_batch(metrics_batch)
-
-        # Collect crons
-        crons_data = self._gw_invoke('cron', {'action': 'list', 'includeDisabled': True})
-        if crons_data and 'jobs' in crons_data:
-            jobs = crons_data['jobs']
-            snapshot['crons'] = jobs
-
-            enabled = sum(1 for j in jobs if j.get('enabled'))
-            self.db.insert_metric('crons_enabled', enabled, ts=ts)
-            self.db.insert_metric('crons_total', len(jobs), ts=ts)
-
-            # Check for recent runs
-            for job in jobs:
-                jid = job.get('id', '')
-                jname = job.get('name', job.get('label', ''))
-                last_run = job.get('lastRun', {})
-                if isinstance(last_run, dict) and last_run.get('startedAt'):
-                    run_ts_str = last_run.get('startedAt', '')
-                    try:
-                        if isinstance(run_ts_str, str):
-                            run_ts = datetime.fromisoformat(run_ts_str.replace('Z', '+00:00')).timestamp()
-                        else:
-                            run_ts = run_ts_str / 1000 if run_ts_str > 1e12 else run_ts_str
-                    except (ValueError, TypeError):
-                        run_ts = 0
-
-                    seen = self._last_cron_runs.get(jid, set())
-                    if run_ts and run_ts not in seen:
-                        status = last_run.get('status', 'unknown')
-                        duration = last_run.get('durationMs', 0) or 0
-                        error = last_run.get('error', '') or ''
-                        self.db.insert_cron_run(jid, jname, status, duration, error, ts=run_ts)
-                        seen.add(run_ts)
-                        self._last_cron_runs[jid] = seen
-
-        # Store full snapshot
-        if snapshot:
-            self.db.insert_snapshot(snapshot, ts)
+    @staticmethod
+    def _safe_float(val) -> Optional[float]:
+        """Safely convert a value to float, returning None on failure."""
+        if val is None:
+            return None
+        try:
+            return float(val)
+        except (TypeError, ValueError):
+            return None
