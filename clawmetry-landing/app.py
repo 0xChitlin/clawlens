@@ -14,6 +14,7 @@ FROM_EMAIL = "ClawMetry <hello@clawmetry.com>"
 UPDATES_EMAIL = "ClawMetry Updates <updates@clawmetry.com>"
 NOTIFY_SECRET = os.environ.get("NOTIFY_SECRET", "clawmetry-notify-2026")
 
+VIVEK_EMAIL = "vivekchand19@gmail.com"
 RESEND_HEADERS = {"Authorization": f"Bearer {RESEND_API_KEY}", "Content-Type": "application/json"}
 
 WELCOME_HTML = """\
@@ -67,6 +68,36 @@ def send_welcome_email(email):
     })
 
 
+def _get_visitor_info(req):
+    """Extract location/browser info from request."""
+    ip = req.headers.get("X-Forwarded-For", req.headers.get("X-Real-IP", req.remote_addr))
+    if ip and "," in ip:
+        ip = ip.split(",")[0].strip()
+    ua = req.headers.get("User-Agent", "Unknown")
+    referer = req.headers.get("Referer", "Direct")
+    # Try IP geolocation (best-effort)
+    location = "Unknown"
+    try:
+        geo = requests.get(f"https://ipapi.co/{ip}/json/", timeout=3).json()
+        city = geo.get("city", "")
+        region = geo.get("region", "")
+        country = geo.get("country_name", "")
+        location = ", ".join(filter(None, [city, region, country]))
+    except Exception:
+        pass
+    return {"ip": ip, "user_agent": ua, "referer": referer, "location": location or "Unknown"}
+
+
+def notify_vivek(subject, body_html):
+    """Send a notification email to Vivek."""
+    _resend_post("/emails", {
+        "from": FROM_EMAIL,
+        "to": [VIVEK_EMAIL],
+        "subject": subject,
+        "html": body_html,
+    })
+
+
 def add_contact(email):
     """Add contact to Resend audience. Returns (ok, already_existed)."""
     ok, data = _resend_post(f"/audiences/{RESEND_AUDIENCE_ID}/contacts", {
@@ -96,6 +127,22 @@ def subscribe():
         return jsonify({"error": "Failed to subscribe. Try again."}), 500
 
     send_welcome_email(email)
+
+    # Notify Vivek
+    visitor = _get_visitor_info(request)
+    notify_vivek(
+        f"🦞 New ClawMetry subscriber: {email}",
+        f"""<div style="font-family:sans-serif;max-width:500px;">
+        <h2>New Subscriber!</h2>
+        <p><strong>Email:</strong> {email}</p>
+        <p><strong>Location:</strong> {visitor['location']}</p>
+        <p><strong>IP:</strong> {visitor['ip']}</p>
+        <p><strong>Browser:</strong> {visitor['user_agent'][:120]}</p>
+        <p><strong>Referer:</strong> {visitor['referer']}</p>
+        <p><strong>Time:</strong> {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}</p>
+        </div>"""
+    )
+
     return jsonify({"ok": True, "message": "Subscribed!"})
 
 
@@ -162,6 +209,31 @@ def notify():
             errors.append({"email": email, "error": resp})
 
     return jsonify({"ok": True, "sent": sent, "total": len(emails), "errors": errors})
+
+
+@app.route("/api/copy-track", methods=["POST"])
+def copy_track():
+    """Track when someone copies the install command."""
+    data = request.get_json(silent=True) or {}
+    tab = data.get("tab", "unknown")
+    command = data.get("command", "")
+    visitor = _get_visitor_info(request)
+
+    notify_vivek(
+        f"🦞 Someone copied ClawMetry install command ({tab})",
+        f"""<div style="font-family:sans-serif;max-width:500px;">
+        <h2>Install Command Copied!</h2>
+        <p><strong>Tab:</strong> {tab}</p>
+        <p><strong>Command:</strong> <code>{command}</code></p>
+        <p><strong>Location:</strong> {visitor['location']}</p>
+        <p><strong>IP:</strong> {visitor['ip']}</p>
+        <p><strong>Browser:</strong> {visitor['user_agent'][:120]}</p>
+        <p><strong>Referer:</strong> {visitor['referer']}</p>
+        <p><strong>Time:</strong> {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}</p>
+        </div>"""
+    )
+
+    return jsonify({"ok": True})
 
 
 @app.route("/api/subscribers", methods=["GET"])

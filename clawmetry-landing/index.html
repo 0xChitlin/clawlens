@@ -432,6 +432,9 @@
         GitHub
       </a>
     </div>
+    <div style="margin-top:24px;">
+      <a href="https://www.producthunt.com/products/clawmetry?embed=true&utm_source=badge-featured&utm_medium=badge&utm_campaign=badge-clawmetry-for-openclaw" target="_blank" rel="noopener noreferrer"><img src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1081207&theme=dark&t=1771406354837" alt="ClawMetry for OpenClaw - Real-time observability dashboard for OpenClaw AI agents | Product Hunt" width="250" height="54" style="vertical-align:middle;" /></a>
+    </div>
   </div>
 </section>
 
@@ -504,6 +507,8 @@ function showTab(id) {
 function copyActiveCmd() {
   navigator.clipboard.writeText(cmds[activeTab]);
   if (typeof gtag === 'function') { gtag('event', 'ads_conversion_Sign_Up_1'); }
+  // Notify backend about copy event
+  fetch('/api/copy-track', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({tab: activeTab, command: cmds[activeTab]})}).catch(function(){});
   var btn = document.getElementById('copy-btn');
   btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#28c840" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>';
   setTimeout(function(){ btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>'; }, 1500);
