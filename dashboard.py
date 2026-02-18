@@ -1431,41 +1431,43 @@ DASHBOARD_HTML = r"""
   }
 
   [data-theme="dark"] {
-    /* Dark theme */
-    --bg-primary: #0b0f14;
-    --bg-secondary: #121820;
-    --bg-tertiary: #151d28;
-    --bg-hover: #1b2430;
-    --bg-accent: #3b82f6;
-    --border-primary: #273243;
-    --border-secondary: #1f2937;
-    --text-primary: #e6edf5;
-    --text-secondary: #c1cad6;
-    --text-tertiary: #98a2b3;
-    --text-muted: #7c8a9d;
-    --text-faint: #667085;
-    --text-accent: #60a5fa;
-    --text-link: #7dd3fc;
-    --text-success: #4ade80;
+    /* Dark theme - ClawWallet palette */
+    --bg-primary: #080810;
+    --bg-secondary: #0d0d1a;
+    --bg-tertiary: #12121f;
+    --bg-hover: #1a1a2f;
+    --bg-accent: #00ff87;
+    --border-primary: rgba(255,255,255,0.08);
+    --border-secondary: rgba(255,255,255,0.05);
+    --text-primary: #ffffff;
+    --text-secondary: #d1d5db;
+    --text-tertiary: #9ca3af;
+    --text-muted: #9ca3af;
+    --text-faint: #6b7280;
+    --text-accent: #00ff87;
+    --text-link: #00ff87;
+    --text-success: #00ff87;
     --text-warning: #fbbf24;
     --text-error: #f87171;
-    --bg-success: #10291c;
+    --bg-success: #00201a;
     --bg-warning: #2a2314;
     --bg-error: #341717;
-    --log-bg: #0f141c;
-    --file-viewer-bg: #111722;
-    --button-bg: #1d2632;
-    --button-hover: #263344;
-    --card-shadow: 0 1px 3px rgba(0,0,0,0.4);
-    --card-shadow-hover: 0 8px 18px rgba(0,0,0,0.45);
+    --log-bg: #080810;
+    --file-viewer-bg: #12121f;
+    --button-bg: #12121f;
+    --button-hover: #1a1a2f;
+    --card-shadow: 0 1px 3px rgba(0,0,0,0.6);
+    --card-shadow-hover: 0 8px 24px rgba(0,255,135,0.08);
   }
 
   * { box-sizing: border-box; margin: 0; padding: 0; transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease; }
-  body { font-family: 'Manrope', -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', Roboto, sans-serif; background: radial-gradient(1200px 600px at 70% -20%, rgba(15,111,255,0.06), transparent 55%), var(--bg-primary); color: var(--text-primary); min-height: 100vh; font-size: 14px; font-weight: 500; line-height: 1.5; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+  body { font-family: 'Manrope', -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', Roboto, sans-serif; background: radial-gradient(1200px 600px at 70% -20%, rgba(0,255,135,0.04), transparent 55%), var(--bg-primary); color: var(--text-primary); min-height: 100vh; font-size: 14px; font-weight: 500; line-height: 1.5; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
 
   .nav { background: color-mix(in srgb, var(--bg-secondary) 90%, transparent); border-bottom: 1px solid var(--border-primary); padding: 8px 16px; display: flex; align-items: center; gap: 12px; overflow-x: auto; -webkit-overflow-scrolling: touch; box-shadow: 0 1px 2px rgba(16,24,40,0.06); position: sticky; top: 0; z-index: 10; backdrop-filter: blur(8px); }
   .nav h1 { font-size: 18px; font-weight: 700; color: var(--text-primary); white-space: nowrap; letter-spacing: -0.3px; }
   .nav h1 span { color: var(--text-accent); }
+  .nav-brand { display: flex; flex-direction: column; gap: 1px; }
+  .nav-subtitle { font-size: 10px; color: var(--text-muted); font-weight: 500; white-space: nowrap; letter-spacing: 0.2px; }
   .theme-toggle { background: var(--button-bg); border: none; border-radius: 8px; padding: 8px 12px; color: var(--text-tertiary); cursor: pointer; font-size: 16px; margin-left: 12px; transition: all 0.15s; box-shadow: var(--card-shadow); }
   .theme-toggle:hover { background: var(--button-hover); color: var(--text-secondary); }
   .theme-toggle:active { transform: scale(0.98); }
@@ -1479,10 +1481,12 @@ DASHBOARD_HTML = r"""
   .nav-tab { padding: 8px 16px; border-radius: 8px; background: transparent; border: 1px solid transparent; color: var(--text-tertiary); cursor: pointer; font-size: 13px; font-weight: 600; white-space: nowrap; transition: all 0.2s ease; position: relative; }
   .nav-tab:hover { background: var(--bg-hover); color: var(--text-secondary); }
   .nav-tab.active { background: var(--bg-accent); color: #ffffff; border-color: var(--bg-accent); }
+  [data-theme="dark"] .nav-tab.active { color: #080810; font-weight: 700; }
   .nav-tab:active { transform: scale(0.98); }
   .time-btn { padding: 4px 12px; border-radius: 6px; background: var(--bg-secondary); border: 1px solid var(--border-primary); color: var(--text-tertiary); cursor: pointer; font-size: 12px; font-weight: 600; transition: all 0.2s; }
   .time-btn:hover { background: var(--bg-hover); color: var(--text-secondary); }
   .time-btn.active { background: var(--bg-accent); color: #fff; border-color: var(--bg-accent); }
+  [data-theme="dark"] .time-btn.active { color: #080810; }
 
   .page { display: none; padding: 16px 20px; max-width: 1200px; margin: 0 auto; }
   #page-overview { max-width: 1600px; padding: 8px 12px; }
@@ -1496,7 +1500,7 @@ DASHBOARD_HTML = r"""
     display: flex;
     align-items: center;
     justify-content: center;
-    background: radial-gradient(1000px 540px at 70% -20%, rgba(15,111,255,0.18), transparent 60%), var(--bg-primary);
+    background: radial-gradient(1000px 540px at 70% -20%, rgba(0,255,135,0.07), transparent 60%), var(--bg-primary);
     transition: opacity 0.28s ease;
   }
   .boot-overlay.hide { opacity: 0; pointer-events: none; }
@@ -1585,7 +1589,7 @@ DASHBOARD_HTML = r"""
   .cron-btn-run:hover { background: #059669; }
   .cron-btn-toggle { background: #6366f1; color: #fff; }
   .cron-btn-toggle:hover { background: #4f46e5; }
-  .cron-btn-edit { background: #3b82f6; color: #fff; }
+  .cron-btn-edit { background: #00ff87; color: #080810; }
   .cron-btn-edit:hover { background: #2563eb; }
   .cron-btn-delete { background: #ef4444; color: #fff; }
   .cron-btn-delete:hover { background: #dc2626; }
@@ -1717,10 +1721,10 @@ DASHBOARD_HTML = r"""
   .flow-node-machine rect { stroke: #606880; }
   .flow-node-storage rect { stroke: #806a30; }
   .flow-node-network rect { stroke: #308080; }
-  [data-theme="dark"] .flow-node-runtime rect { fill: #10182a; }
-  [data-theme="dark"] .flow-node-machine rect { fill: #141420; }
-  [data-theme="dark"] .flow-node-storage rect { fill: #1a1810; }
-  [data-theme="dark"] .flow-node-network rect { fill: #0e1c20; }
+  [data-theme="dark"] .flow-node-runtime rect { fill: #0d0d1a; }
+  [data-theme="dark"] .flow-node-machine rect { fill: #12121f; }
+  [data-theme="dark"] .flow-node-storage rect { fill: #141420; }
+  [data-theme="dark"] .flow-node-network rect { fill: #0d141f; }
   .flow-node-runtime.active rect { filter: drop-shadow(0 0 10px rgba(74,112,144,0.7)); stroke-dasharray: none; stroke-width: 2.5; }
   .flow-node-machine.active rect { filter: drop-shadow(0 0 10px rgba(96,104,128,0.7)); stroke-dasharray: none; stroke-width: 2.5; }
   .flow-node-storage.active rect { filter: drop-shadow(0 0 10px rgba(128,106,48,0.7)); stroke-dasharray: none; stroke-width: 2.5; }
@@ -1856,8 +1860,8 @@ DASHBOARD_HTML = r"""
   .task-card-badge.running { background: #dcfce7; color: #166534; }
   .task-card-badge.complete { background: #dbeafe; color: #1e40af; }
   .task-card-badge.failed { background: #fef2f2; color: #991b1b; }
-  [data-theme="dark"] .task-card-badge.running { background: #14532d; color: #86efac; }
-  [data-theme="dark"] .task-card-badge.complete { background: #1e3a5f; color: #93c5fd; }
+  [data-theme="dark"] .task-card-badge.running { background: #00201a; color: #00ff87; }
+  [data-theme="dark"] .task-card-badge.complete { background: #0d1f12; color: #00e077; }
   [data-theme="dark"] .task-card-badge.failed { background: #450a0a; color: #fca5a5; }
   .task-card-duration { font-size: 12px; color: var(--text-muted); margin-bottom: 6px; }
   .task-card-action { font-size: 12px; color: var(--text-secondary); font-family: 'JetBrains Mono', monospace; background: var(--bg-secondary); padding: 6px 10px; border-radius: 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -1877,7 +1881,7 @@ DASHBOARD_HTML = r"""
   @keyframes statusPulseGreen { 0%,100% { box-shadow: 0 0 0 0 rgba(34,197,94,0.5); } 50% { box-shadow: 0 0 0 6px rgba(34,197,94,0); } }
   .status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
   .status-dot.running { background: #22c55e; animation: statusPulseGreen 1.5s ease-in-out infinite; }
-  .status-dot.complete { background: #3b82f6; }
+  .status-dot.complete { background: #00ff87; }
   .status-dot.failed { background: #ef4444; }
 
   /* === Zoom Wrapper === */
@@ -1934,7 +1938,7 @@ DASHBOARD_HTML = r"""
   .evt-ts { font-size: 11px; color: var(--text-muted); flex-shrink: 0; font-family: monospace; }
   .evt-body { display: none; padding: 0 14px 12px; font-family: 'JetBrains Mono', 'SF Mono', monospace; font-size: 12px; line-height: 1.6; color: var(--text-tertiary); white-space: pre-wrap; word-break: break-word; max-height: 400px; overflow-y: auto; }
   .evt-body.open { display: block; }
-  .evt-item.type-agent { border-left: 3px solid #3b82f6; }
+  .evt-item.type-agent { border-left: 3px solid #00ff87; }
   .evt-item.type-exec { border-left: 3px solid #16a34a; }
   .evt-item.type-read { border-left: 3px solid #8b5cf6; }
   .evt-item.type-result { border-left: 3px solid #ea580c; }
@@ -1968,11 +1972,11 @@ DASHBOARD_HTML = r"""
 
   /* Telegram Chat Bubbles */
   .tg-stats { display: flex; gap: 16px; padding: 10px 14px; background: var(--bg-secondary); border-radius: 8px; margin-bottom: 12px; font-size: 13px; font-weight: 600; }
-  .tg-stats .in { color: #3b82f6; } .tg-stats .out { color: #22c55e; }
+  .tg-stats .in { color: #00ff87; } .tg-stats .out { color: #22c55e; }
   .tg-chat { display: flex; flex-direction: column; gap: 8px; }
   .tg-bubble { max-width: 85%; padding: 10px 14px; border-radius: 16px; font-size: 13px; line-height: 1.5; word-wrap: break-word; position: relative; }
-  .tg-bubble.in { background: #1e3a5f; border: 1px solid #2a5a8a; color: #c0d8ff; align-self: flex-start; border-bottom-left-radius: 4px; }
-  .tg-bubble.out { background: #1a3a2a; border: 1px solid #2a5a3a; color: #c0ffc0; align-self: flex-end; border-bottom-right-radius: 4px; }
+  .tg-bubble.in { background: #0d1f12; border: 1px solid rgba(0,255,135,0.2); color: #d1fae5; align-self: flex-start; border-bottom-left-radius: 4px; }
+  .tg-bubble.out { background: #12121f; border: 1px solid rgba(255,255,255,0.08); color: #e0e0e0; align-self: flex-end; border-bottom-right-radius: 4px; }
   [data-theme="light"] .tg-bubble.in { background: #dbeafe; border-color: #93c5fd; color: #1e3a5f; }
   [data-theme="light"] .tg-bubble.out { background: #dcfce7; border-color: #86efac; color: #14532d; }
   .tg-bubble .tg-sender { font-size: 11px; font-weight: 700; margin-bottom: 2px; opacity: 0.7; }
@@ -2049,7 +2053,7 @@ DASHBOARD_HTML = r"""
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 </head>
-<body data-theme="light" class="booting"><script>var t=localStorage.getItem('openclaw-theme');if(t==='dark')document.body.setAttribute('data-theme','dark');</script>
+<body data-theme="dark" class="booting"><script>var t=localStorage.getItem('openclaw-theme');if(t==='light')document.body.setAttribute('data-theme','light');else document.body.setAttribute('data-theme','dark');</script>
 <!-- Login overlay -->
 <div id="login-overlay" style="display:none;position:fixed;inset:0;z-index:99999;background:var(--bg-primary,#0f172a);align-items:center;justify-content:center;flex-direction:column;">
   <div style="background:var(--card-bg,#1e293b);border-radius:16px;padding:40px;max-width:400px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,0.4);text-align:center;">
@@ -2057,7 +2061,7 @@ DASHBOARD_HTML = r"""
     <h2 style="color:#e2e8f0;margin:0 0 8px;">ClawLens</h2>
     <p style="color:#94a3b8;margin:0 0 24px;font-size:14px;">Enter your OpenClaw Gateway Token</p>
     <input id="login-token" type="password" placeholder="Gateway token..." style="width:100%;box-sizing:border-box;padding:12px 16px;border-radius:8px;border:1px solid #334155;background:#0f172a;color:#e2e8f0;font-size:15px;margin-bottom:16px;outline:none;" onkeydown="if(event.key==='Enter')clawlensLogin()">
-    <button onclick="clawlensLogin()" style="width:100%;padding:12px;border-radius:8px;border:none;background:#3b82f6;color:#fff;font-size:15px;font-weight:600;cursor:pointer;">Login</button>
+    <button onclick="clawlensLogin()" style="width:100%;padding:12px;border-radius:8px;border:none;background:#00ff87;color:#080810;font-size:15px;font-weight:600;cursor:pointer;">Login</button>
     <p id="login-error" style="color:#f87171;margin:12px 0 0;font-size:13px;display:none;">Invalid token</p>
   </div>
 </div>
@@ -2139,7 +2143,10 @@ function clawlensLogout(){
 </div>
 <div class="zoom-wrapper" id="zoom-wrapper">
 <div class="nav">
-  <h1><span>🦞</span> ClawLens</h1>
+  <div class="nav-brand">
+    <h1><span>🦞</span> ClawLens</h1>
+    <span class="nav-subtitle">Full observability for your .claw agent</span>
+  </div>
   <div class="theme-toggle" onclick="var o=document.getElementById('gw-setup-overlay');o.dataset.mandatory='false';document.getElementById('gw-setup-close').style.display='';o.style.display='flex'" title="Gateway settings" style="cursor:pointer;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></div>
   <div class="theme-toggle" onclick="openBudgetModal()" title="Budget & Alerts" style="cursor:pointer;">&#128176;</div>
   <div class="theme-toggle" id="theme-toggle-btn" onclick="toggleTheme()" title="Toggle theme"><svg class="icon-moon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg></div>
@@ -3050,7 +3057,7 @@ function toggleTheme() {
 }
 
 function initTheme() {
-  const savedTheme = localStorage.getItem('openclaw-theme') || 'light';
+  const savedTheme = localStorage.getItem('openclaw-theme') || 'dark';
   const body = document.body;
   const toggle = document.getElementById('theme-toggle-btn');
   
@@ -4210,7 +4217,7 @@ async function loadMCTasks() {
     wrapper.style.display='';
     var tasks = data.tasks || [];
     var cols = [
-      {key:'inbox', label:'Inbox', color:'#3b82f6', bg:'#3b82f620', icon:'📥', tasks:[]},
+      {key:'inbox', label:'Inbox', color:'#00ff87', bg:'#00ff8720', icon:'📥', tasks:[]},
       {key:'in_progress', label:'In Progress', color:'#16a34a', bg:'#16a34a20', icon:'🔄', tasks:[]},
       {key:'review', label:'Review', color:'#d97706', bg:'#d9770620', icon:'👀', tasks:[]},
       {key:'blocked', label:'Blocked', color:'#dc2626', bg:'#dc262620', icon:'🚫', tasks:[]},
@@ -5800,7 +5807,7 @@ function loadBrainData(isRefresh) {
     var tIn = tok.input||0, tOut = tok.output||0, tCR = tok.cache_read||0;
     var tTotal = tIn+tOut+tCR || 1;
     html += '<div style="display:flex;height:6px;border-radius:3px;overflow:hidden;margin-bottom:16px;background:var(--bg-secondary);">';
-    html += '<div style="width:' + (tIn/tTotal*100) + '%;background:#3b82f6;" title="Input: ' + tIn + '"></div>';
+    html += '<div style="width:' + (tIn/tTotal*100) + '%;background:#00ff87;" title="Input: ' + tIn + '"></div>';
     html += '<div style="width:' + (tOut/tTotal*100) + '%;background:#8b5cf6;" title="Output: ' + tOut + '"></div>';
     html += '<div style="width:' + (tCR/tTotal*100) + '%;background:#22c55e;" title="Cache Read: ' + tCR + '"></div>';
     html += '</div>';
@@ -5824,7 +5831,7 @@ function loadBrainData(isRefresh) {
         html += '<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--bg-secondary);border-radius:8px;border:1px solid var(--border-secondary);font-size:11px;flex-wrap:wrap;">';
         html += '<span style="color:var(--text-tertiary);min-width:58px;">' + ts + '</span>';
         html += '<span style="color:var(--text-muted);font-size:10px;min-width:50px;">' + escapeHtml(c.session||'main') + '</span>';
-        html += '<span style="color:#3b82f6;min-width:45px;" title="In">' + (c.tokens_in>=1000?(c.tokens_in/1000).toFixed(1)+'K':c.tokens_in) + '→</span>';
+        html += '<span style="color:var(--text-accent);min-width:45px;" title="In">' + (c.tokens_in>=1000?(c.tokens_in/1000).toFixed(1)+'K':c.tokens_in) + '→</span>';
         html += '<span style="color:#8b5cf6;min-width:40px;" title="Out">' + (c.tokens_out>=1000?(c.tokens_out/1000).toFixed(1)+'K':c.tokens_out) + '</span>';
         html += '<span style="color:' + cColor + ';min-width:50px;">' + (c.cost||'$0') + '</span>';
         html += '<span style="color:var(--text-muted);min-width:35px;">' + dur + '</span>';
@@ -6181,7 +6188,7 @@ function loadGatewayData(isRefresh) {
     html += '<div style="flex:1;min-width:70px;background:var(--bg-secondary);border-radius:8px;padding:10px 12px;text-align:center;"><div style="font-size:20px;font-weight:700;color:var(--text-primary);">' + (s.today_heartbeats||0) + '</div><div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;">Heartbeats</div></div>';
     html += '<div style="flex:1;min-width:70px;background:var(--bg-secondary);border-radius:8px;padding:10px 12px;text-align:center;"><div style="font-size:20px;font-weight:700;color:var(--text-primary);">' + (s.today_crons||0) + '</div><div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;">Cron</div></div>';
     html += '<div style="flex:1;min-width:70px;background:var(--bg-secondary);border-radius:8px;padding:10px 12px;text-align:center;"><div style="font-size:20px;font-weight:700;color:' + ((s.today_errors||0) > 0 ? 'var(--text-error)' : 'var(--text-primary)') + ';">' + (s.today_errors||0) + '</div><div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;">Errors</div></div>';
-    html += '<div style="flex:1;min-width:70px;background:var(--bg-secondary);border-radius:8px;padding:10px 12px;text-align:center;"><div style="font-size:20px;font-weight:700;color:#3b82f6;">' + (s.active_sessions||0) + '</div><div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;">Active Sessions</div></div>';
+    html += '<div style="flex:1;min-width:70px;background:var(--bg-secondary);border-radius:8px;padding:10px 12px;text-align:center;"><div style="font-size:20px;font-weight:700;color:var(--text-accent);">' + (s.active_sessions||0) + '</div><div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;">Active Sessions</div></div>';
     html += '</div>';
 
     // Config summary & uptime
@@ -6208,11 +6215,11 @@ function loadGatewayData(isRefresh) {
       html += '<div style="display:flex;flex-direction:column;gap:6px;">';
       routes.forEach(function(r) {
         var badge = '📨';
-        var badgeColor = '#3b82f6';
+        var badgeColor = '#00ff87';
         if (r.type === 'heartbeat') { badge = '💓'; badgeColor = '#ec4899'; }
         else if (r.type === 'cron') { badge = '⏰'; badgeColor = '#f59e0b'; }
         else if (r.type === 'subagent') { badge = '🐝'; badgeColor = '#8b5cf6'; }
-        else if (r.from === 'telegram') { badge = '📱'; badgeColor = '#3b82f6'; }
+        else if (r.from === 'telegram') { badge = '📱'; badgeColor = '#00ff87'; }
         else if (r.from === 'whatsapp') { badge = '📲'; badgeColor = '#22c55e'; }
 
         var status = r.status === 'error' ? '❌' : '✅';
@@ -6523,7 +6530,7 @@ function loadToolData(toolKey, comp, isRefresh) {
       var reads = events.filter(function(e){return e.action!=='write';}).length;
       var writes = events.filter(function(e){return e.action==='write';}).length;
       html += '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px;">';
-      html += '<div style="background:var(--bg-secondary);border-radius:10px;padding:12px;text-align:center;"><div style="font-size:24px;font-weight:700;color:#3b82f6;">' + reads + '</div><div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;">Reads</div></div>';
+      html += '<div style="background:var(--bg-secondary);border-radius:10px;padding:12px;text-align:center;"><div style="font-size:24px;font-weight:700;color:var(--text-accent);">' + reads + '</div><div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;">Reads</div></div>';
       html += '<div style="background:var(--bg-secondary);border-radius:10px;padding:12px;text-align:center;"><div style="font-size:24px;font-weight:700;color:#f59e0b;">' + writes + '</div><div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;">Writes</div></div>';
       html += '<div style="background:var(--bg-secondary);border-radius:10px;padding:12px;text-align:center;"><div style="font-size:24px;font-weight:700;color:var(--text-primary);">' + files.length + '</div><div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;">Files</div></div>';
       html += '</div>';
@@ -6548,7 +6555,7 @@ function loadToolData(toolKey, comp, isRefresh) {
         events.forEach(function(evt) {
           var ts = _fmtToolTs(evt.timestamp);
           var isWrite = evt.action === 'write';
-          var badge = isWrite ? '<span style="background:#f59e0b33;color:#f59e0b;padding:1px 6px;border-radius:4px;font-size:10px;font-weight:600;">WRITE</span>' : '<span style="background:#3b82f633;color:#3b82f6;padding:1px 6px;border-radius:4px;font-size:10px;font-weight:600;">READ</span>';
+          var badge = isWrite ? '<span style="background:#f59e0b33;color:#f59e0b;padding:1px 6px;border-radius:4px;font-size:10px;font-weight:600;">WRITE</span>' : '<span style="background:#00ff8733;color:#00ff87;padding:1px 6px;border-radius:4px;font-size:10px;font-weight:600;">READ</span>';
           html += '<div style="padding:6px 10px;background:var(--bg-secondary);border-radius:6px;display:flex;align-items:center;gap:8px;font-size:12px;">';
           html += badge;
           html += '<code style="color:var(--text-secondary);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + escapeHtml(evt.detail || '') + '</code>';
@@ -7108,12 +7115,12 @@ async function showSnapshot(ts) {
     <input id="gw-token-input" type="password" placeholder="Paste your gateway token" 
       style="width:100%; padding:12px 16px; border:1px solid var(--border-primary, #444); border-radius:8px; background:var(--bg-primary, #111); color:var(--text-primary, #fff); font-size:14px; font-family:monospace; box-sizing:border-box; outline:none; margin-bottom:8px;"
       onkeydown="if(event.key==='Enter')gwSetupConnect()">
-    <p id="gw-setup-hint" style="color:var(--text-muted, #888); font-size:12px; margin:0 0 4px; text-align:left;">Find it: <code style="color:var(--text-accent, #0af); background:rgba(0,170,255,0.1); padding:2px 6px; border-radius:4px;">docker exec $(docker ps -q) env | grep TOKEN</code> or <code style="color:var(--text-accent, #0af); background:rgba(0,170,255,0.1); padding:2px 6px; border-radius:4px;">gateway.auth.token</code></p>
+    <p id="gw-setup-hint" style="color:var(--text-muted, #9ca3af); font-size:12px; margin:0 0 4px; text-align:left;">Find it: <code style="color:var(--text-accent, #00ff87); background:rgba(0,255,135,0.08); padding:2px 6px; border-radius:4px;">docker exec $(docker ps -q) env | grep TOKEN</code> or <code style="color:var(--text-accent, #00ff87); background:rgba(0,255,135,0.08); padding:2px 6px; border-radius:4px;">gateway.auth.token</code></p>
     <p id="gw-url-hint" style="color:var(--text-muted, #666); font-size:11px; margin:0 0 16px; text-align:left;">Optional: <input id="gw-url-input" type="text" placeholder="http://localhost:18789 (auto-detected)" style="width:70%; padding:4px 8px; border:1px solid var(--border-primary, #444); border-radius:4px; background:var(--bg-primary, #111); color:var(--text-primary, #fff); font-size:11px; font-family:monospace;"></p>
     <div id="gw-setup-error" style="color:#ff4444; font-size:13px; margin-bottom:12px; display:none;"></div>
     <div id="gw-setup-status" style="color:var(--text-accent, #0af); font-size:13px; margin-bottom:12px; display:none;"></div>
     <button onclick="gwSetupConnect()" id="gw-connect-btn"
-      style="width:100%; padding:12px; border:none; border-radius:8px; background:var(--bg-accent, #0f6fff); color:#fff; font-size:15px; font-weight:600; cursor:pointer; font-family:Manrope,sans-serif;">
+      style="width:100%; padding:12px; border:none; border-radius:8px; background:var(--bg-accent, #00ff87); color:#080810; font-size:15px; font-weight:600; cursor:pointer; font-family:Manrope,sans-serif;">
       Connect
     </button>
     <p style="color:var(--text-faint, #555); font-size:11px; margin:16px 0 0;">Token is stored locally on this ClawLens instance.</p>
@@ -8320,25 +8327,25 @@ FLEET_HTML = r"""
 <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { font-family: 'Manrope', sans-serif; background: #0f1117; color: #e0e0e0; padding: 24px; }
+  body { font-family: 'Manrope', sans-serif; background: #080810; color: #e0e0e0; padding: 24px; }
   .header { display: flex; align-items: center; gap: 16px; margin-bottom: 24px; }
   .header h1 { font-size: 28px; font-weight: 800; }
-  .header h1 span { color: #0f6fff; }
-  .header .back { color: #667; text-decoration: none; font-size: 14px; }
-  .header .back:hover { color: #0f6fff; }
+  .header h1 span { color: #00ff87; }
+  .header .back { color: #9ca3af; text-decoration: none; font-size: 14px; }
+  .header .back:hover { color: #00ff87; }
   .summary { display: flex; gap: 16px; margin-bottom: 24px; flex-wrap: wrap; }
-  .stat-card { background: #1a1d27; border: 1px solid #2a2d37; border-radius: 12px; padding: 16px 20px; min-width: 150px; }
-  .stat-card .label { font-size: 12px; color: #667; text-transform: uppercase; letter-spacing: 0.5px; }
+  .stat-card { background: #12121f; border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; padding: 16px 20px; min-width: 150px; }
+  .stat-card .label { font-size: 12px; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.5px; }
   .stat-card .value { font-size: 28px; font-weight: 700; margin-top: 4px; }
   .stat-card .value.green { color: #22c55e; }
   .stat-card .value.red { color: #ef4444; }
-  .stat-card .value.blue { color: #0f6fff; }
+  .stat-card .value.blue { color: #00ff87; }
   .search { margin-bottom: 16px; }
-  .search input { background: #1a1d27; border: 1px solid #2a2d37; border-radius: 8px; padding: 10px 16px; color: #e0e0e0; font-size: 14px; width: 300px; outline: none; }
-  .search input:focus { border-color: #0f6fff; }
+  .search input { background: #12121f; border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 10px 16px; color: #e0e0e0; font-size: 14px; width: 300px; outline: none; }
+  .search input:focus { border-color: #00ff87; }
   .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px; }
-  .node-card { background: #1a1d27; border: 1px solid #2a2d37; border-radius: 12px; padding: 20px; cursor: pointer; transition: border-color 0.2s, transform 0.1s; }
-  .node-card:hover { border-color: #0f6fff; transform: translateY(-2px); }
+  .node-card { background: #12121f; border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; padding: 20px; cursor: pointer; transition: border-color 0.2s, transform 0.1s; }
+  .node-card:hover { border-color: #00ff87; transform: translateY(-2px); }
   .node-card .top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
   .node-card .name { font-size: 16px; font-weight: 700; }
   .node-card .status { display: inline-block; padding: 2px 10px; border-radius: 12px; font-size: 11px; font-weight: 600; text-transform: uppercase; }
@@ -8348,11 +8355,11 @@ FLEET_HTML = r"""
   .node-card .meta { font-size: 12px; color: #667; margin-bottom: 12px; }
   .node-card .metrics { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
   .node-card .metric { }
-  .node-card .metric .ml { font-size: 11px; color: #667; }
+  .node-card .metric .ml { font-size: 11px; color: #9ca3af; }
   .node-card .metric .mv { font-size: 15px; font-weight: 600; }
-  .empty { text-align: center; padding: 60px; color: #667; }
-  .empty h2 { font-size: 20px; margin-bottom: 8px; color: #888; }
-  .empty code { background: #1a1d27; padding: 2px 8px; border-radius: 4px; font-size: 13px; }
+  .empty { text-align: center; padding: 60px; color: #9ca3af; }
+  .empty h2 { font-size: 20px; margin-bottom: 8px; color: #d1d5db; }
+  .empty code { background: #12121f; padding: 2px 8px; border-radius: 4px; font-size: 13px; }
 </style>
 </head>
 <body>
