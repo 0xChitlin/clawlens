@@ -16,3 +16,9 @@
 !dashboard-full.png
 !*.png
 !*.png
+!llms.txt
+!docs.html
+!robots.txt
+!sitemap.xml
+!.well-known/
+!.well-known/**

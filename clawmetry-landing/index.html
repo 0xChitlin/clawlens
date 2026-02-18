@@ -3,15 +3,144 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!-- Google tag (gtag.js) -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-XDF9MFD8FJ"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', 'G-XDF9MFD8FJ');
+    gtag('config', 'G-6H5W9Y2B79');
+  </script>
+  <!-- Google Ads conversion tracking -->
+  <script>
+  function gtagSendEvent(url) {
+    var callback = function () {
+      if (typeof url === 'string') { window.location = url; }
+    };
+    gtag('event', 'ads_conversion_Sign_Up_1', {
+      'event_callback': callback,
+      'event_timeout': 2000,
+    });
+    return false;
+  }
+  // Track install.sh as conversion
+  if (window.location.pathname === '/install.sh') {
+    gtag('event', 'ads_conversion_Sign_Up_1');
+  }
+  </script>
+  <!-- Microsoft Clarity -->
+  <script type="text/javascript">
+    (function(c,l,a,r,i,t,y){
+      c[a]=c[a]||function(){(c[a].q=c[a].q||[]).push(arguments)};
+      t=l.createElement(r);t.async=1;t.src="https://www.clarity.ms/tag/"+i;
+      y=l.getElementsByTagName(r)[0];y.parentNode.insertBefore(t,y);
+    })(window, document, "clarity", "script", "virz7z5n97");
+  </script>
   <title>Clawmetry - See what your AI agents are actually doing</title>
-  <meta name="description" content="Real-time dashboard for OpenClaw agents. Token costs, sub-agent trees, tool calls. pip install clawmetry.">
-  <meta property="og:title" content="Clawmetry - See what your AI agents are actually doing">
-  <meta property="og:description" content="Real-time dashboard for OpenClaw agents. Token costs, sub-agents, tool calls. Install in 30 seconds.">
+  <meta name="description" content="ClawMetry is a free, open-source real-time observability dashboard for AI agents. Monitor token costs, cron jobs, sub-agents, memory files, and session history. Works with OpenClaw. Install in 30 seconds: pip install clawmetry.">
+  <meta name="keywords" content="AI agent monitoring, LLM observability, AI agent dashboard, token cost tracking, cron job monitoring, OpenClaw, LLMOps, AI ops, sub-agent monitoring, open source AI tools">
+  <meta name="author" content="Vivek Chand">
+  <link rel="canonical" href="https://clawmetry.com/">
+
+  <!-- Structured Data for AI crawlers & Google -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "ClawMetry",
+    "description": "Real-time observability dashboard for AI agents. Monitor token usage, cron jobs, sub-agents, memory, and session history. Free and open source.",
+    "applicationCategory": "DeveloperApplication",
+    "operatingSystem": "Linux, macOS, Windows",
+    "offers": {
+      "@type": "Offer",
+      "price": "0",
+      "priceCurrency": "USD"
+    },
+    "author": {
+      "@type": "Person",
+      "name": "Vivek Chand",
+      "url": "https://vivekchand.github.io"
+    },
+    "url": "https://clawmetry.com",
+    "downloadUrl": "https://pypi.org/project/clawmetry/",
+    "softwareVersion": "0.8.1",
+    "license": "https://opensource.org/licenses/MIT",
+    "screenshot": "https://clawmetry.com/screenshots/flow.png",
+    "featureList": [
+      "Real-time token flow visualization by model and session",
+      "Cron job monitoring with failure alerts",
+      "Sub-agent visibility: files, commands, tools, thinking",
+      "Memory file tracking and changes",
+      "Session history with timeline and cost breakdown",
+      "Cost breakdown per-session, per-model, per-tool",
+      "Mission Control integration",
+      "Dark and light theme support"
+    ],
+    "isAccessibleForFree": true,
+    "sameAs": [
+      "https://github.com/vivekchand/clawmetry",
+      "https://pypi.org/project/clawmetry/"
+    ]
+  }
+  </script>
+
+  <!-- FAQ Schema for AI recommendations -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    "mainEntity": [
+      {
+        "@type": "Question",
+        "name": "What is ClawMetry?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "ClawMetry is a free, open-source real-time observability dashboard for AI agents built on OpenClaw. It monitors token costs, cron jobs, sub-agents, memory files, and session history in a single dashboard."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "How do I install ClawMetry?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Install ClawMetry with pip: pip install clawmetry. Then add one line to your OpenClaw config and open clawmetry.com. Installation takes about 30 seconds."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Is ClawMetry free?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Yes, ClawMetry is completely free and open source under the MIT license. It runs locally on your machine with no cloud dependencies or telemetry."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "What AI agent platforms does ClawMetry support?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "ClawMetry is designed for OpenClaw AI agents. It supports monitoring of any OpenClaw deployment including cron jobs, sub-agents, and tool calls across models like Claude, GPT, and others."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "How does ClawMetry help reduce AI costs?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "ClawMetry provides real-time token flow visualization showing exactly which models, sessions, and tasks are consuming tokens. It breaks down costs per-session, per-model, and per-tool so you can identify expensive operations and optimize spending."
+        }
+      }
+    ]
+  }
+  </script>
+  <meta property="og:title" content="ClawMetry — Real-time AI Agent Observability Dashboard">
+  <meta property="og:description" content="Free, open-source dashboard to monitor AI agents. Track token costs, cron jobs, sub-agents, memory. pip install clawmetry.">
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://clawmetry.com">
-  <meta property="og:image" content="https://clawmetry.com/dashboard-flow.png">
+  <meta property="og:image" content="https://clawmetry.com/dashboard-flow.png?v=3">
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:image" content="https://clawmetry.com/dashboard-flow.png">
+  <meta name="twitter:image" content="https://clawmetry.com/dashboard-flow.png?v=3">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦞</text></svg>">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -374,6 +503,7 @@ function showTab(id) {
 }
 function copyActiveCmd() {
   navigator.clipboard.writeText(cmds[activeTab]);
+  if (typeof gtag === 'function') { gtag('event', 'ads_conversion_Sign_Up_1'); }
   var btn = document.getElementById('copy-btn');
   btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#28c840" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>';
   setTimeout(function(){ btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>'; }, 1500);
@@ -529,6 +659,29 @@ function copyActiveCmd() {
     <span style="background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:8px 18px;font-size:14px;color:var(--text-muted);">Windows WSL</span>
   </div>
 </section>
+
+<!-- SUBSCRIBE -->
+<section style="padding:60px 24px 80px;text-align:center;">
+  <h2 class="section-title">Stay in the loop</h2>
+  <p class="section-sub">Get notified about new features, releases, and the growing -metry ecosystem.</p>
+  <form id="subscribe-form" style="display:flex;gap:10px;max-width:440px;margin:28px auto 0;flex-wrap:wrap;justify-content:center;">
+    <input type="email" id="sub-email" placeholder="you@example.com" required style="flex:1;min-width:220px;padding:12px 16px;border-radius:8px;border:1px solid var(--border);background:var(--bg-card);color:var(--text);font-size:15px;outline:none;">
+    <button type="submit" style="padding:12px 28px;border-radius:8px;border:none;background:#28c840;color:#000;font-weight:600;font-size:15px;cursor:pointer;transition:opacity .2s;">Subscribe</button>
+  </form>
+  <p id="sub-msg" style="margin-top:12px;font-size:13px;color:var(--text-muted);display:none;"></p>
+</section>
+<script>
+document.getElementById('subscribe-form').addEventListener('submit',function(e){
+  e.preventDefault();
+  var email=document.getElementById('sub-email').value;
+  var msg=document.getElementById('sub-msg');
+  msg.style.display='block';
+  msg.textContent='Thanks! We\'ll keep you posted. 🦞';
+  msg.style.color='#28c840';
+  document.getElementById('sub-email').value='';
+  fetch('/subscribe',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:email,source:'clawmetry',ts:new Date().toISOString()})}).catch(function(){});
+});
+</script>
 
 <!-- FOOTER -->
 <footer>
