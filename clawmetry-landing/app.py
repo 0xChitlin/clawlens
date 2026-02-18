@@ -3,6 +3,7 @@ import os
 import re
 import logging
 import sys
+import time
 from datetime import datetime, timezone
 
 import requests
@@ -143,6 +144,9 @@ def subscribe():
 
     send_welcome_email(email)
     log.info(f"[subscribe] Welcome email sent to {email}")
+
+    # Small delay to avoid Resend rate limit (2 req/s)
+    time.sleep(1)
 
     # Notify Vivek (best-effort, don't block response)
     try:
