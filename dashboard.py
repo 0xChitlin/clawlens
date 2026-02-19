@@ -435,11 +435,11 @@ def _fetch_fleet_agents_onchain():
 
     agents = []
     try:
-        # Get total supply
+        # Get total supply from V2 registry
         supply_hex = _eth_call(ERC8004_REGISTRY, "0x18160ddd")
         total = _decode_uint256(supply_hex)
-        if total == 0 or total > 500:
-            total = min(total, 500)
+        if total > 500:
+            total = 500
 
         for token_id in range(1, total + 1):
             padded = _pad32(token_id)
@@ -454,7 +454,7 @@ def _fetch_fleet_agents_onchain():
                 agent_wallet = "0x" + raw[24:64].lower()
                 # Slot 1 = offset to name string
                 # Slot 2 = registeredAt (uint)
-                registered_at = int(raw[128:192], 16) if len(raw) >= 192 else 0
+                reg_at = int(raw[128:192], 16) if len(raw) >= 192 else 0
                 # Slot 3 = creator (address)
                 creator = "0x" + raw[216:256].lower() if len(raw) >= 256 else "0x"
                 # Slot 4 = active (bool)
@@ -467,25 +467,26 @@ def _fetch_fleet_agents_onchain():
                     "name": name or f"agent-{token_id}",
                     "owner": owner,
                     "agentWallet": agent_wallet,
-                    "registeredAt": registered_at,
+                    "registeredAt": reg_at,
                     "active": active,
+                    "registry": "v2",
                 })
     except Exception as e:
         pass  # Return empty list on failure
 
-    # Also query V1 registry (founding domains, tokenIds 1-50 until error)
+    # Also query V1 registry (founding domains — ERC-721, iterate until ownerOf reverts)
+    # V1 agents have tokenURI returning JSON {"name": "xyz.claw", ...}
+    # De-duplicate by name against V2 agents already fetched
+    v2_names = {a["name"].lower() for a in agents}
     try:
         for token_id in range(1, 51):
             padded = _pad32(token_id)
             owner_hex = _eth_call(ERC8004_REGISTRY_V1, "0x6352211e" + padded)
             owner = _decode_address(owner_hex)
             if not owner or owner == "0x" + "0" * 40:
-                break  # No more tokens
-            # Check for duplicate (already in V2)
-            if any(a.get("tokenId") == token_id and a.get("registry") == "v2" for a in agents):
-                continue
-            # V1 uses tokenURI (0xc87b56dd) which returns JSON with "name" field
-            name = f"agent-{token_id}"
+                break  # No more tokens — stop iterating
+            # V1 uses tokenURI (0xc87b56dd) which returns ABI-encoded JSON string
+            name = f"agent-v1-{token_id}"
             try:
                 uri_hex = _eth_call(ERC8004_REGISTRY_V1, "0xc87b56dd" + padded)
                 if uri_hex and len(uri_hex) > 130:
@@ -496,12 +497,15 @@ def _fetch_fleet_agents_onchain():
                     name = meta.get('name', name)
             except Exception:
                 pass
+            # Skip if this domain is already registered in V2
+            if name.lower() in v2_names:
+                continue
             agents.append({
                 "tokenId": token_id,
                 "name": name,
                 "owner": owner,
                 "agentWallet": "0x",
-                "registeredAt": registered_at,
+                "registeredAt": 0,
                 "active": True,
                 "registry": "v1",
             })
@@ -7458,10 +7462,12 @@ async function loadFleet() {
 
     badge.textContent = agents.length + ' agents';
     badge.style.display = agents.length > 0 ? '' : 'none';
-    statusEl.textContent = 'Abstract Mainnet · ERC-8004 Registry · ' + new Date().toLocaleTimeString();
+    var v1count = agents.filter(function(a){ return a.registry === 'v1'; }).length;
+    var v2count = agents.filter(function(a){ return a.registry === 'v2'; }).length;
+    statusEl.textContent = 'Abstract Mainnet · ERC-8004 V1+V2 · ' + v1count + ' founding + ' + v2count + ' V2 · ' + new Date().toLocaleTimeString();
 
     if (agents.length === 0) {
-      grid.innerHTML = '<div style="color:var(--text-muted);font-size:13px;padding:32px;text-align:center;">No agents registered on-chain yet.<br><span style="font-size:11px;margin-top:8px;display:block;color:#555;">Registry: 0x01949e...8E5</span></div>';
+      grid.innerHTML = '<div style="color:var(--text-muted);font-size:13px;padding:32px;text-align:center;">No agents registered on-chain yet.<br><span style="font-size:11px;margin-top:8px;display:block;color:#555;">V1: 0x4EFffaBBe...2146 · V2: 0x01949e45...8E5</span></div>';
       return;
     }
 
@@ -7469,20 +7475,23 @@ async function loadFleet() {
     agents.forEach(function(a) {
       var regDate = a.registeredAt ? new Date(a.registeredAt * 1000).toLocaleDateString() : '—';
       var ownerShort = a.owner && a.owner.length > 10 ? a.owner.slice(0,6)+'…'+a.owner.slice(-4) : (a.owner||'—');
-      var walletShort = a.agentWallet && a.agentWallet.length > 10 ? a.agentWallet.slice(0,6)+'…'+a.agentWallet.slice(-4) : (a.agentWallet||'—');
+      var walletShort = a.agentWallet && a.agentWallet !== '0x' && a.agentWallet.length > 10 ? a.agentWallet.slice(0,6)+'…'+a.agentWallet.slice(-4) : '—';
       var activeBadge = a.active
         ? '<span style="background:#00ff87;color:#080810;border-radius:10px;padding:2px 8px;font-size:11px;font-weight:700;">Active</span>'
         : '<span style="background:#333;color:#888;border-radius:10px;padding:2px 8px;font-size:11px;">Inactive</span>';
+      var regBadge = a.registry === 'v1'
+        ? '<span style="background:#2a1a4a;color:#a78bfa;border-radius:10px;padding:2px 7px;font-size:10px;font-weight:600;margin-left:6px;">Founding · V1</span>'
+        : '<span style="background:#0a2a1a;color:#00ff87;border-radius:10px;padding:2px 7px;font-size:10px;font-weight:600;margin-left:6px;">V2</span>';
       html += '<div style="background:#0e0e1a;border:1px solid #1e1e3a;border-radius:12px;padding:18px;position:relative;">';
       html += '<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">';
       html += '<div style="width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,#00ff87,#00b8ff);display:flex;align-items:center;justify-content:center;font-size:16px;">🤖</div>';
-      html += '<div><div style="font-weight:700;font-size:15px;color:#fff;">'+escHtml(a.name)+'</div>';
+      html += '<div style="flex:1;min-width:0;"><div style="font-weight:700;font-size:15px;color:#fff;">'+escHtml(a.name)+regBadge+'</div>';
       html += '<div style="font-size:11px;color:#555;">#'+a.tokenId+'</div></div>';
       html += activeBadge+'</div>';
       html += '<div style="font-size:12px;color:#888;line-height:1.8;">';
       html += '<div><span style="color:#555;">Owner:</span> <span style="color:#aaa;font-family:monospace;">'+ownerShort+'</span></div>';
-      html += '<div><span style="color:#555;">Wallet:</span> <span style="color:#00ff87;font-family:monospace;">'+walletShort+'</span></div>';
-      html += '<div><span style="color:#555;">Registered:</span> <span style="color:#aaa;">'+regDate+'</span></div>';
+      if (walletShort !== '—') html += '<div><span style="color:#555;">Wallet:</span> <span style="color:#00ff87;font-family:monospace;">'+walletShort+'</span></div>';
+      if (a.registeredAt) html += '<div><span style="color:#555;">Registered:</span> <span style="color:#aaa;">'+regDate+'</span></div>';
       html += '</div></div>';
     });
     grid.innerHTML = html;
