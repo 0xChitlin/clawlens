@@ -54,7 +54,7 @@ except ImportError:
     metrics_service_pb2 = None
     trace_service_pb2 = None
 
-__version__ = "0.9.4"
+__version__ = "0.9.5"
 
 app = Flask(__name__)
 
@@ -84,7 +84,6 @@ FLEET_NODE_TIMEOUT = 300  # seconds before node is considered offline
 # ── On-chain / $PINCH Config ────────────────────────────────────────────
 ERC8004_REGISTRY = "0x01949e45FabCD684bcD4747966145140aB4778E5"  # V2
 ERC8004_REGISTRY_V1 = "0x4EFffaBBeBAaF9cA76e08635a5D89901A2BF2146"  # V1 founding domains
-ERC8004_V1_NAMES = {1: "clawwallet.claw", 2: "mojo.claw", 3: "mike.claw", 4: "aegis.claw", 5: "forge.claw", 6: "vault.claw", 7: "pixel.claw"}
 PINCH_TOKEN = "0xF8e86087dc452a52aA5d1bb66FaE56F869C33412"
 ABSTRACT_RPC = "https://api.mainnet.abs.xyz"
 KONA_V2_FACTORY = "0x7c2e370CA0fCb60D8202b8C5b01f758bcAD41860"
@@ -485,7 +484,18 @@ def _fetch_fleet_agents_onchain():
             # Check for duplicate (already in V2)
             if any(a.get("tokenId") == token_id and a.get("registry") == "v2" for a in agents):
                 continue
-            name = ERC8004_V1_NAMES.get(token_id, f"agent-{token_id}")
+            # V1 uses tokenURI (0xc87b56dd) which returns JSON with "name" field
+            name = f"agent-{token_id}"
+            try:
+                uri_hex = _eth_call(ERC8004_REGISTRY_V1, "0xc87b56dd" + padded)
+                if uri_hex and len(uri_hex) > 130:
+                    uri_data = bytes.fromhex(uri_hex[2:])
+                    length = int.from_bytes(uri_data[32:64], 'big')
+                    uri_str = uri_data[64:64+length].decode('utf-8', errors='replace')
+                    meta = json.loads(uri_str)
+                    name = meta.get('name', name)
+            except Exception:
+                pass
             agents.append({
                 "tokenId": token_id,
                 "name": name,
