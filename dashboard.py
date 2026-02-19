@@ -54,7 +54,7 @@ except ImportError:
     metrics_service_pb2 = None
     trace_service_pb2 = None
 
-__version__ = "0.9.3"
+__version__ = "0.9.4"
 
 app = Flask(__name__)
 
@@ -84,6 +84,7 @@ FLEET_NODE_TIMEOUT = 300  # seconds before node is considered offline
 # ── On-chain / $PINCH Config ────────────────────────────────────────────
 ERC8004_REGISTRY = "0x01949e45FabCD684bcD4747966145140aB4778E5"  # V2
 ERC8004_REGISTRY_V1 = "0x4EFffaBBeBAaF9cA76e08635a5D89901A2BF2146"  # V1 founding domains
+ERC8004_V1_NAMES = {1: "clawwallet.claw", 2: "mojo.claw", 3: "mike.claw", 4: "aegis.claw", 5: "forge.claw", 6: "vault.claw", 7: "pixel.claw"}
 PINCH_TOKEN = "0xF8e86087dc452a52aA5d1bb66FaE56F869C33412"
 ABSTRACT_RPC = "https://api.mainnet.abs.xyz"
 KONA_V2_FACTORY = "0x7c2e370CA0fCb60D8202b8C5b01f758bcAD41860"
@@ -484,15 +485,10 @@ def _fetch_fleet_agents_onchain():
             # Check for duplicate (already in V2)
             if any(a.get("tokenId") == token_id and a.get("registry") == "v2" for a in agents):
                 continue
-            identity_hex = _eth_call(ERC8004_REGISTRY_V1, "0x1a686502" + padded)
-            name = _decode_string_from_abi(identity_hex) if identity_hex and identity_hex != "0x" else None
-            registered_at = 0
-            if identity_hex and len(identity_hex) > 2 + 192:
-                raw = identity_hex[2:]
-                registered_at = int(raw[128:192], 16) if len(raw) >= 192 else 0
+            name = ERC8004_V1_NAMES.get(token_id, f"agent-{token_id}")
             agents.append({
                 "tokenId": token_id,
-                "name": name or f"agent-{token_id}",
+                "name": name,
                 "owner": owner,
                 "agentWallet": "0x",
                 "registeredAt": registered_at,
